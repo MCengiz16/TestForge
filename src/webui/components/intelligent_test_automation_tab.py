@@ -582,7 +582,7 @@ module.exports = {{
         # Run the test
         test_case.test_execution_log.append("🚀 Executing Playwright test...")
         
-        test_cmd = ["npx", "playwright", "test", "--config", config_file]
+        test_cmd = ["npx", "playwright", "test", "--config", "playwright.config.js"]
         result = subprocess.run(test_cmd, cwd=test_dir, capture_output=True, text=True)
         
         test_case.test_execution_log.append(f"📊 Test execution completed with exit code: {result.returncode}")
