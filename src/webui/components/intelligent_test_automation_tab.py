@@ -114,10 +114,6 @@ const {{ test, expect }} = require('@playwright/test');
 
 test.describe('{test_case.name}', () => {{
     test('should complete {test_case.name.lower()}', async ({{ page }}) => {{
-        // Test configuration
-        await page.setViewportSize({{ width: 1280, height: 720 }});
-        
-        // Start test execution
         console.log('Starting test: {test_case.name}');
         
 '''
@@ -130,40 +126,41 @@ test.describe('{test_case.name}', () => {{
             script_body += f"        // Step {i}: {step}\n"
             
             if "navigate" in step_lower or "go to" in step_lower:
-                script_body += f"        await page.goto('{test_case.url}');\n"
-                script_body += "        await page.waitForLoadState('networkidle');\n"
-                script_body += "        await page.screenshot({ path: 'step-1-navigate.png' });\n\n"
+                url = IntelligentScriptGenerator._extract_url_from_step(step) or test_case.url
+                script_body += f"        await page.goto('{url}');\n"
+                script_body += "        await page.waitForLoadState('networkidle');\n\n"
                 
             elif "type" in step_lower or "enter" in step_lower or "fill" in step_lower:
                 # Find relevant input field from discovered elements
                 input_selector = IntelligentScriptGenerator._find_input_selector(step, test_case.discovered_elements)
                 text_to_type = IntelligentScriptGenerator._extract_text_from_step(step)
                 
-                script_body += f"        // Wait for input field and type text\n"
                 script_body += f"        await page.waitForSelector('{input_selector}', {{ visible: true }});\n"
-                script_body += f"        await page.fill('{input_selector}', '{text_to_type}');\n"
-                script_body += f"        await page.screenshot({{ path: 'step-{i}-input.png' }});\n\n"
+                script_body += f"        await page.fill('{input_selector}', '{text_to_type}');\n\n"
                 
-            elif "click" in step_lower:
+            elif "click" in step_lower or "login" in step_lower or "submit" in step_lower:
                 # Find relevant clickable element
                 click_selector = IntelligentScriptGenerator._find_click_selector(step, test_case.discovered_elements)
                 
-                script_body += f"        // Wait for element and click\n"
                 script_body += f"        await page.waitForSelector('{click_selector}', {{ visible: true }});\n"
                 script_body += f"        await page.click('{click_selector}');\n"
-                script_body += f"        await page.waitForLoadState('networkidle');\n"
-                script_body += f"        await page.screenshot({{ path: 'step-{i}-click.png' }});\n\n"
+                script_body += f"        await page.waitForLoadState('networkidle');\n\n"
                 
-            elif "verify" in step_lower or "check" in step_lower or "assert" in step_lower:
+            elif "verify" in step_lower or "check" in step_lower or "assert" in step_lower or "validate" in step_lower or "present" in step_lower:
                 # Add verification
                 verify_text = IntelligentScriptGenerator._extract_verification_text(step)
-                verify_selector = IntelligentScriptGenerator._find_verification_selector(step, test_case.discovered_elements)
                 
-                script_body += f"        // Verification step\n"
-                script_body += f"        await expect(page.locator('{verify_selector}').first()).toBeVisible();\n"
                 if verify_text:
-                    script_body += f"        await expect(page.locator('{verify_selector}').first()).toContainText('{verify_text}');\n"
-                script_body += f"        await page.screenshot({{ path: 'step-{i}-verify.png' }});\n\n"
+                    # Smart verification - try multiple selectors
+                    script_body += f"        // Verification: {verify_text} should be present\n"
+                    script_body += f"        const element = page.locator(':has-text(\"{verify_text}\")').first();\n"
+                    script_body += f"        await expect(element).toBeVisible();\n"
+                    script_body += f"        await expect(element).toContainText('{verify_text}');\n\n"
+                else:
+                    # Generic visibility check
+                    verify_selector = IntelligentScriptGenerator._find_verification_selector(step, test_case.discovered_elements)
+                    script_body += f"        // Verification step\n"
+                    script_body += f"        await expect(page.locator('{verify_selector}').first()).toBeVisible();\n\n"
                 
             elif "wait" in step_lower:
                 wait_time = IntelligentScriptGenerator._extract_wait_time(step)
@@ -171,15 +168,17 @@ test.describe('{test_case.name}', () => {{
                 script_body += f"        await page.waitForTimeout({wait_time});\n\n"
                 
             else:
-                # Generic action
-                script_body += f"        // Manual step - implement as needed\n"
-                script_body += f"        // TODO: {step}\n"
-                script_body += f"        await page.screenshot({{ path: 'step-{i}-manual.png' }});\n\n"
+                # Try to handle other common actions
+                if any(word in step_lower for word in ['button', 'btn']):
+                    button_selector = IntelligentScriptGenerator._find_button_selector(step, test_case.discovered_elements)
+                    script_body += f"        await page.waitForSelector('{button_selector}', {{ visible: true }});\n"
+                    script_body += f"        await page.click('{button_selector}');\n\n"
+                else:
+                    # Fallback - try to extract action intelligently
+                    script_body += f"        // {step}\n"
+                    script_body += f"        // TODO: Implement specific action for: {step}\n\n"
         
-        script_footer = f'''        // Final verification screenshot
-        await page.screenshot({{ path: 'test-completed.png', fullPage: true }});
-        
-        console.log('Test completed successfully: {test_case.name}');
+        script_footer = f'''        console.log('Test completed successfully: {test_case.name}');
     }});
 }});
 '''
@@ -191,15 +190,36 @@ test.describe('{test_case.name}', () => {{
         """Find the best input selector from discovered elements"""
         step_lower = step.lower()
         
-        # Look for keywords that might match discovered elements
+        # Look for specific field types first
+        if 'username' in step_lower or 'user name' in step_lower:
+            # Look for username field in discovered elements
+            for desc, selector in discovered_elements.items():
+                if any(word in desc.lower() for word in ['username', 'user', 'name', 'login']):
+                    return selector
+            return '#user-name, #username, input[name*="user"], input[placeholder*="user"]'
+            
+        elif 'password' in step_lower:
+            # Look for password field in discovered elements
+            for desc, selector in discovered_elements.items():
+                if 'password' in desc.lower():
+                    return selector
+            return '#password, input[type="password"], input[name*="password"]'
+            
+        elif 'email' in step_lower:
+            # Look for email field in discovered elements
+            for desc, selector in discovered_elements.items():
+                if 'email' in desc.lower():
+                    return selector
+            return 'input[type="email"], input[name*="email"]'
+        
+        # Generic input field lookup
         for desc, selector in discovered_elements.items():
             desc_lower = desc.lower()
-            if any(keyword in desc_lower for keyword in ['input', 'field', 'textbox', 'email', 'password', 'username']):
-                if any(keyword in step_lower for keyword in ['email', 'username', 'password', 'name']):
-                    return selector
+            if any(keyword in desc_lower for keyword in ['input', 'field', 'textbox']):
+                return selector
         
         # Default fallback
-        return 'input[type="text"], input[type="email"], input[type="password"]'
+        return 'input[type="text"]:first, input:not([type]):first'
     
     @staticmethod
     def _find_click_selector(step: str, discovered_elements: Dict[str, str]) -> str:
@@ -263,6 +283,100 @@ test.describe('{test_case.name}', () => {{
         if time_match:
             return int(time_match.group(1)) * 1000  # Convert to milliseconds
         return 2000  # Default 2 seconds
+    
+    @staticmethod
+    def _extract_url_from_step(step: str) -> str:
+        """Extract URL from step text"""
+        import re
+        url_pattern = r'https?://[^\s]+'
+        match = re.search(url_pattern, step)
+        return match.group(0) if match else None
+    
+    @staticmethod
+    def _find_button_selector(step: str, discovered_elements: Dict[str, str]) -> str:
+        """Find button selector from discovered elements"""
+        step_lower = step.lower()
+        
+        # Look for button-related discovered elements
+        for desc, selector in discovered_elements.items():
+            desc_lower = desc.lower()
+            if any(keyword in desc_lower for keyword in ['button', 'btn', 'submit', 'login', 'click']):
+                return selector
+        
+        # Fallback selectors
+        if 'login' in step_lower or 'submit' in step_lower:
+            return 'button[type="submit"], input[type="submit"], .login-btn, #login-button'
+        
+        return 'button, input[type="button"], .btn'
+
+
+async def _generate_script_with_ai(llm: BaseChatModel, test_case: TestCase) -> str:
+    """Generate Playwright script using AI analysis of the test case"""
+    
+    # Prepare discovered elements summary
+    elements_info = ""
+    if test_case.discovered_elements:
+        elements_info = "\n\nDiscovered Elements:\n"
+        for desc, selector in test_case.discovered_elements.items():
+            elements_info += f"- {desc}: {selector}\n"
+    
+    # Create AI prompt for script generation
+    prompt = f"""You are an expert Playwright test automation engineer. 
+
+Please analyze this test case and generate a complete, professional Playwright test script.
+
+TEST CASE:
+Name: {test_case.name}
+URL: {test_case.url}
+Steps:
+{chr(10).join([f"{i+1}. {step}" for i, step in enumerate(test_case.steps)])}
+
+{elements_info}
+
+REQUIREMENTS:
+1. Generate a complete Playwright test script in JavaScript
+2. Use proper selectors (IDs, CSS selectors, or text-based locators)
+3. Include proper error handling and waits (use 30 second timeouts for all actions)
+4. Use expect() assertions for validations
+5. No screenshots needed (videos and traces are captured automatically)
+6. Make the script robust and maintainable
+7. Use waitForSelector with 30 second timeout: await page.waitForSelector('selector', {{ timeout: 30000 }})
+8. For SauceLabs specifically, use these selectors if applicable:
+   - Username field: #user-name
+   - Password field: #password  
+   - Login button: #login-button
+   - Product elements: .inventory_item_name
+
+Generate ONLY the JavaScript code, no explanations:"""
+
+    try:
+        response = await llm.ainvoke(prompt)
+        script_content = response.content if hasattr(response, 'content') else str(response)
+        
+        # Clean up the response to extract just the code
+        if '```javascript' in script_content:
+            script_content = script_content.split('```javascript')[1].split('```')[0].strip()
+        elif '```' in script_content:
+            script_content = script_content.split('```')[1].split('```')[0].strip()
+        
+        return script_content
+        
+    except Exception as e:
+        logger.error(f"AI script generation failed: {e}")
+        # Fallback to basic template
+        return f'''const {{ test, expect }} = require('@playwright/test');
+
+test.describe('{test_case.name}', () => {{
+    test('should complete {test_case.name.lower()}', async ({{ page }}) => {{
+        await page.goto('{test_case.url}', {{ timeout: 30000 }});
+        await page.waitForLoadState('networkidle', {{ timeout: 30000 }});
+        
+        // TODO: Implement test steps with 30 second timeouts
+        {chr(10).join([f"        // {step}" for step in test_case.steps])}
+        
+        console.log('Test completed: {test_case.name}');
+    }});
+}});'''
 
 
 async def _initialize_llm_for_intelligent_test(webui_manager: WebuiManager, components: Dict) -> Optional[BaseChatModel]:
@@ -509,8 +623,8 @@ async def _explore_page_and_discover_elements(
             "content": elements_summary
         })
         
-        # Generate script with discovered locators
-        test_case.playwright_script = IntelligentScriptGenerator.generate_script_with_real_locators(test_case)
+        # Generate script with AI
+        test_case.playwright_script = await _generate_script_with_ai(llm, test_case)
         
         yield {
             status_comp: gr.update(value="✅ Script Ready"),
@@ -565,10 +679,15 @@ async def _run_playwright_test(
         playwright_config = f'''
 module.exports = {{
     testDir: '.',
-    timeout: 30000,
+    timeout: 120000,
+    expect: {{
+        timeout: 30000
+    }},
     use: {{
         headless: false,
         viewport: null,
+        actionTimeout: 30000,
+        navigationTimeout: 30000,
         launchOptions: {{
             args: [
                 '--start-fullscreen',
@@ -580,7 +699,7 @@ module.exports = {{
                 '--disable-features=VizDisplayCompositor'
             ]
         }},
-        screenshot: 'on',
+        screenshot: 'off',
         video: 'on',
         trace: 'on',
     }},
@@ -595,6 +714,8 @@ module.exports = {{
             name: 'chromium',
             use: {{
                 viewport: null,
+                actionTimeout: 30000,
+                navigationTimeout: 30000,
                 launchOptions: {{
                     args: [
                         '--start-fullscreen',
@@ -606,7 +727,7 @@ module.exports = {{
                         '--disable-features=VizDisplayCompositor'
                     ]
                 }},
-                screenshot: 'on',
+                screenshot: 'off',
                 video: 'on',
                 trace: 'on',
             }},
@@ -781,12 +902,13 @@ Check that user is redirected to dashboard""",
                 gr.Markdown("## 📋 Generated Script")
                 
                 playwright_script = gr.Code(
-                    label="Playwright Test Script (with Real Locators)",
+                    label="Playwright Test Script (AI Generated - Editable)",
                     language="javascript",
-                    lines=15,
+                    lines=20,
                     show_label=True,
                     container=True,
-                    interactive=True
+                    interactive=True,
+                    elem_id="editable_script"
                 )
                 
                 gr.Markdown("## 📊 Test Results & Reports")
@@ -916,17 +1038,20 @@ Check that user is redirected to dashboard""",
                 update[playwright_script] = gr.update(value=test_case.playwright_script)
             yield update
     
-    async def run_latest_playwright_test():
-        """Run the generated Playwright test for the latest test case"""
+    async def run_latest_playwright_test(current_script):
+        """Run the Playwright test using the current script content"""
         if not webui_manager.test_cases:
             yield gr.update(value="❌ No test created. Please create a test first."), gr.update(), gr.update()
             return
         
         test_case = webui_manager.test_cases[-1]  # Get the latest test case
         
-        if test_case.status != "script_ready":
-            yield gr.update(value="❌ Must explore page first. Click 'Create Test & Explore'."), gr.update(), gr.update()
+        if not current_script or current_script.strip() == "":
+            yield gr.update(value="❌ No script available. Please create and explore a test first."), gr.update(), gr.update()
             return
+        
+        # Use the current script content from the UI (allows editing)
+        test_case.playwright_script = current_script
         
         async for update in _run_playwright_test(webui_manager, test_case):
             # Extract updates for each component
@@ -992,7 +1117,7 @@ Check that user is redirected to dashboard""",
     
     run_test_btn.click(
         fn=run_latest_playwright_test,
-        inputs=[],
+        inputs=[playwright_script],
         outputs=[status, execution_log, report_status]
     )
     
