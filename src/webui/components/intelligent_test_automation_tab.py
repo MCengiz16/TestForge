@@ -299,14 +299,18 @@ async def _explore_page_and_discover_elements(
     """Phase 1: Agent explores page and discovers real locators"""
     
     status_comp = webui_manager.get_component_by_id("test_automation.status")
-    log_comp = webui_manager.get_component_by_id("test_automation.exploration_log")
+    chatbot_comp = webui_manager.get_component_by_id("test_automation.agent_chatbot")
     
     test_case.status = "exploring"
-    test_case.exploration_log = ["🔍 Starting page exploration to discover elements..."]
+    
+    # Initialize chat history for this test (Gradio chatbot expects tuples: [user_message, assistant_message])
+    webui_manager.test_chat_history = [
+        [None, f"🔍 **Starting page exploration for:** {test_case.name}\n\n📍 Target URL: {test_case.url}\n\n🎯 **Test Steps to Discover:**\n" + "\n".join([f"• {step}" for step in test_case.steps])]
+    ]
     
     yield {
         status_comp: gr.update(value="🔍 Exploring Page"),
-        log_comp: gr.update(value="\n".join(test_case.exploration_log))
+        chatbot_comp: gr.update(value=webui_manager.test_chat_history)
     }
     
     try:
@@ -336,9 +340,12 @@ async def _explore_page_and_discover_elements(
         ))
         
         # Step 1: Navigate and analyze page structure
-        test_case.exploration_log.append("📍 Navigating to target URL...")
+        webui_manager.test_chat_history.append([
+            None, 
+            "📍 **Initializing browser and starting exploration...**\n\n🌐 Navigating to target URL..."
+        ])
         yield {
-            log_comp: gr.update(value="\n".join(test_case.exploration_log))
+            chatbot_comp: gr.update(value=webui_manager.test_chat_history)
         }
         
         exploration_task = f"""
@@ -363,6 +370,9 @@ async def _explore_page_and_discover_elements(
         # Track discovered elements during exploration
         discovered_elements = {}
         
+        # Store the generator for updating UI during agent execution
+        current_generator = None
+        
         def track_elements(state: BrowserState, output: AgentOutput, step_num: int):
             """Callback to track discovered elements"""
             new_elements = ElementDiscovery.extract_locators_from_agent_output(output)
@@ -370,7 +380,7 @@ async def _explore_page_and_discover_elements(
             test_case.discovered_elements.update(new_elements)
             
             # Extract action info for better logging
-            action_desc = "Unknown action"
+            action_desc = "Analyzing page structure"
             if output and output.action:
                 for action in output.action:
                     if hasattr(action, 'model_dump'):
@@ -380,12 +390,25 @@ async def _explore_page_and_discover_elements(
                         action_desc = f"{action_type}: {reasoning}"
                         break
             
-            step_desc = f"Step {step_num}: {action_desc}"
+            # Add step to chat history like original agent
+            step_content = f"**🤖 Agent Step {step_num}:**\n\n🎯 {action_desc}"
             if new_elements:
-                step_desc += f" (Found {len(new_elements)} elements: {', '.join(new_elements.keys())})"
+                step_content += f"\n\n🔍 **Discovered Elements:**\n"
+                for desc, selector in new_elements.items():
+                    step_content += f"• {desc}: `{selector}`\n"
             
-            test_case.exploration_log.append(f"✅ {step_desc}")
-            logger.info(f"Agent step completed: {step_desc}")
+            webui_manager.test_chat_history.append([None, step_content])
+            
+            # Try to yield update if we have a generator context
+            try:
+                if hasattr(webui_manager, 'current_exploration_update'):
+                    webui_manager.current_exploration_update = {
+                        chatbot_comp: gr.update(value=webui_manager.test_chat_history)
+                    }
+            except Exception as e:
+                logger.debug(f"Could not yield real-time update: {e}")
+            
+            logger.info(f"Agent step completed: Step {step_num} - {action_desc}")
         
         agent = BrowserUseAgent(
             task=exploration_task,
@@ -400,16 +423,21 @@ async def _explore_page_and_discover_elements(
         )
         
         # Run exploration
-        test_case.exploration_log.append("🤖 Agent is exploring the page...")
-        test_case.exploration_log.append("🔗 Open VNC viewer to watch the agent work: http://localhost:6080")
+        webui_manager.test_chat_history.append([
+            None,
+            "🤖 **Agent starting page exploration...**\n\n👀 **WATCH LIVE:** http://localhost:6080\n\n🔗 Click the link above to see the browser in action!"
+        ])
         yield {
-            log_comp: gr.update(value="\n".join(test_case.exploration_log))
+            chatbot_comp: gr.update(value=webui_manager.test_chat_history)
         }
         
         try:
-            test_case.exploration_log.append("🚀 Starting agent execution...")
+            webui_manager.test_chat_history.append([
+                None,
+                "🚀 **Starting agent execution...**\n\nAgent will now navigate and discover elements on the page."
+            ])
             yield {
-                log_comp: gr.update(value="\n".join(test_case.exploration_log))
+                chatbot_comp: gr.update(value=webui_manager.test_chat_history)
             }
             
             # Set environment variable for display
@@ -417,38 +445,57 @@ async def _explore_page_and_discover_elements(
             
             await asyncio.wait_for(agent.run(max_steps=10), timeout=120.0)
             
-            test_case.exploration_log.append("🎯 Agent execution completed successfully")
+            webui_manager.test_chat_history.append([
+                None,
+                "🎯 **Agent execution completed successfully!**\n\nPage exploration finished. Elements discovered and ready for script generation."
+            ])
             
         except asyncio.TimeoutError:
-            test_case.exploration_log.append("⏰ Agent execution timed out after 2 minutes")
-            test_case.exploration_log.append("💡 This might be normal for complex pages")
+            webui_manager.test_chat_history.append([
+                None,
+                "⏰ **Agent execution timed out** after 2 minutes\n\n💡 This might be normal for complex pages. Proceeding with discovered elements..."
+            ])
         except Exception as agent_error:
-            test_case.exploration_log.append(f"⚠️ Agent execution error: {str(agent_error)}")
-            test_case.exploration_log.append("🔄 Continuing with discovered elements...")
+            webui_manager.test_chat_history.append([
+                None,
+                f"⚠️ **Agent execution error:** {str(agent_error)}\n\n🔄 Continuing with discovered elements..."
+            ])
         
         # Clean up browser
         await context.close()
         await browser.close()
         
         test_case.status = "script_ready"
-        test_case.exploration_log.append(f"🎉 Exploration complete! Discovered {len(test_case.discovered_elements)} elements")
-        test_case.exploration_log.append(f"📋 Elements found: {', '.join(test_case.discovered_elements.keys())}")
+        
+        # Final summary
+        elements_summary = f"🎉 **Exploration Complete!**\n\n🔍 **Discovered {len(test_case.discovered_elements)} elements:**\n"
+        for desc, selector in test_case.discovered_elements.items():
+            elements_summary += f"• {desc}: `{selector}`\n"
+        elements_summary += f"\n📝 **Generating Playwright script with real locators...**"
+        
+        webui_manager.test_chat_history.append([
+            None,
+            elements_summary
+        ])
         
         # Generate script with discovered locators
         test_case.playwright_script = IntelligentScriptGenerator.generate_script_with_real_locators(test_case)
         
         yield {
             status_comp: gr.update(value="✅ Script Ready"),
-            log_comp: gr.update(value="\n".join(test_case.exploration_log))
+            chatbot_comp: gr.update(value=webui_manager.test_chat_history)
         }
         
     except Exception as e:
         test_case.status = "failed"
-        test_case.exploration_log.append(f"❌ Exploration failed: {str(e)}")
+        webui_manager.test_chat_history.append([
+            None,
+            f"❌ **Exploration failed:** {str(e)}"
+        ])
         
         yield {
             status_comp: gr.update(value="❌ Exploration Failed"),
-            log_comp: gr.update(value="\n".join(test_case.exploration_log))
+            chatbot_comp: gr.update(value=webui_manager.test_chat_history)
         }
 
 
@@ -573,6 +620,12 @@ module.exports = {{
         test_case.status = "completed"
         test_case.test_execution_log.append("🎉 Test execution completed!")
         
+        # Add direct report link
+        if os.path.exists(report_index):
+            report_url = f"file://{os.path.abspath(report_index)}"
+            test_case.test_execution_log.append(f"🔗 Direct Report Link: {report_url}")
+            test_case.test_execution_log.append("💡 Click the link above to open the full Playwright report")
+        
         yield {
             status_comp: gr.update(value="🎉 Test Completed"),
             execution_log_comp: gr.update(value="\n".join(test_case.test_execution_log)),
@@ -593,6 +646,7 @@ def create_test_automation_tab(webui_manager: WebuiManager):
     """Create intelligent test automation interface"""
     
     webui_manager.test_cases = []
+    webui_manager.test_chat_history = []  # For agent steps display
     
     with gr.Column():
         gr.Markdown("# 🧪 Intelligent Test Automation", elem_classes=["tab-header-text"])
@@ -659,31 +713,39 @@ Check that user is redirected to dashboard""",
                 
                 download_script_btn = gr.Button("💾 Download Script", variant="secondary")
                 
-                gr.Markdown("## 📊 Test Results")
+                gr.Markdown("## 📊 Test Results & Reports")
                 
                 test_report = gr.File(
-                    label="Playwright HTML Report",
+                    label="Download Playwright HTML Report",
                     file_types=[".html"]
+                )
+                
+                report_links = gr.HTML(
+                    value='<div style="padding: 15px; background: #f8f9fa; border-radius: 8px; margin: 10px 0;"><p style="margin: 0; color: #666;">📊 After test completion, direct report links will appear in the execution log below</p></div>',
+                    label="Direct Report Access"
                 )
                 
                 view_report_btn = gr.Button("👁️ View Report", variant="secondary")
         
         # Live Browser View Section
         with gr.Row():
-            gr.Markdown("## 🖥️ Live Browser View")
-            vnc_link = gr.HTML(
-                value='<div style="text-align: center; padding: 20px;"><a href="http://localhost:6080/vnc.html?host=localhost&port=6080" target="_blank" style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">🖥️ Open Live Browser View</a><br><br><small>Click to watch the agent work in real-time!</small></div>',
-                label="Browser Access"
-            )
+            with gr.Column():
+                gr.Markdown("## 🖥️ Live Agent Demonstration")
+                vnc_link = gr.HTML(
+                    value='<div style="text-align: center; padding: 20px; background: #f0f8ff; border: 2px solid #007bff; border-radius: 10px;"><h3 style="color: #007bff; margin: 0 0 15px 0;">👀 Watch Agent Working Live!</h3><a href="http://localhost:6080/vnc.html?host=localhost&port=6080" target="_blank" style="background: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block; margin: 10px;">🖥️ Open Live Browser View</a><br><br><p style="margin: 15px 0; color: #333;"><strong>When you click "🔍 Explore Page":</strong><br>• Agent opens browser automatically<br>• You see every click, type, and scroll<br>• Real-time element discovery</p><p style="color: #666; font-size: 14px;">VNC URL: http://localhost:6080</p></div>',
+                    label="Live Agent Browser"
+                )
         
         # Logs Section
         with gr.Row():
             with gr.Column():
-                gr.Markdown("## 🔍 Exploration Log")
-                exploration_log = gr.Textbox(
-                    label="Agent Page Exploration",
-                    lines=8,
-                    interactive=False
+                gr.Markdown("## 🔍 Live Agent Steps")
+                agent_chatbot = gr.Chatbot(
+                    label="Agent Exploration Steps",
+                    height=300,
+                    show_label=True,
+                    container=True,
+                    show_copy_button=True
                 )
             
             with gr.Column():
@@ -707,9 +769,10 @@ Check that user is redirected to dashboard""",
         "playwright_script": playwright_script,
         "download_script_btn": download_script_btn,
         "test_report": test_report,
+        "report_links": report_links,
         "view_report_btn": view_report_btn,
         "vnc_link": vnc_link,
-        "exploration_log": exploration_log,
+        "agent_chatbot": agent_chatbot,
         "execution_log": execution_log,
     }
     
@@ -833,7 +896,7 @@ Check that user is redirected to dashboard""",
     explore_btn.click(
         fn=explore_wrapper,
         inputs=[test_selector] + list(all_components),
-        outputs=[status, exploration_log, playwright_script]
+        outputs=[status, agent_chatbot, playwright_script]
     )
     
     async def run_test_wrapper(test_id):
