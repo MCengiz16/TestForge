@@ -303,9 +303,9 @@ async def _explore_page_and_discover_elements(
     
     test_case.status = "exploring"
     
-    # Initialize chat history for this test (Gradio chatbot expects tuples: [user_message, assistant_message])
+    # Initialize chat history for this test (using messages format with type="messages")
     webui_manager.test_chat_history = [
-        [None, f"🔍 **Starting page exploration for:** {test_case.name}\n\n📍 Target URL: {test_case.url}\n\n🎯 **Test Steps to Discover:**\n" + "\n".join([f"• {step}" for step in test_case.steps])]
+        {"role": "assistant", "content": f"🔍 **Starting page exploration for:** {test_case.name}\n\n📍 Target URL: {test_case.url}\n\n🎯 **Test Steps to Discover:**\n" + "\n".join([f"• {step}" for step in test_case.steps])}
     ]
     
     yield {
@@ -340,10 +340,10 @@ async def _explore_page_and_discover_elements(
         ))
         
         # Step 1: Navigate and analyze page structure
-        webui_manager.test_chat_history.append([
-            None, 
-            "📍 **Initializing browser and starting exploration...**\n\n🌐 Navigating to target URL..."
-        ])
+        webui_manager.test_chat_history.append({
+            "role": "assistant", 
+            "content": "📍 **Initializing browser and starting exploration...**\n\n🌐 Navigating to target URL..."
+        })
         yield {
             chatbot_comp: gr.update(value=webui_manager.test_chat_history)
         }
@@ -397,7 +397,10 @@ async def _explore_page_and_discover_elements(
                 for desc, selector in new_elements.items():
                     step_content += f"• {desc}: `{selector}`\n"
             
-            webui_manager.test_chat_history.append([None, step_content])
+            webui_manager.test_chat_history.append({
+                "role": "assistant",
+                "content": step_content
+            })
             
             # Try to yield update if we have a generator context
             try:
@@ -423,19 +426,19 @@ async def _explore_page_and_discover_elements(
         )
         
         # Run exploration
-        webui_manager.test_chat_history.append([
-            None,
-            "🤖 **Agent starting page exploration...**\n\n👀 **WATCH LIVE:** http://localhost:6080\n\n🔗 Click the link above to see the browser in action!"
-        ])
+        webui_manager.test_chat_history.append({
+            "role": "assistant",
+            "content": "🤖 **Agent starting page exploration...**\n\n👀 **WATCH LIVE:** http://localhost:6080\n\n🔗 Click the link above to see the browser in action!"
+        })
         yield {
             chatbot_comp: gr.update(value=webui_manager.test_chat_history)
         }
         
         try:
-            webui_manager.test_chat_history.append([
-                None,
-                "🚀 **Starting agent execution...**\n\nAgent will now navigate and discover elements on the page."
-            ])
+            webui_manager.test_chat_history.append({
+                "role": "assistant",
+                "content": "🚀 **Starting agent execution...**\n\nAgent will now navigate and discover elements on the page."
+            })
             yield {
                 chatbot_comp: gr.update(value=webui_manager.test_chat_history)
             }
@@ -445,21 +448,21 @@ async def _explore_page_and_discover_elements(
             
             await asyncio.wait_for(agent.run(max_steps=10), timeout=120.0)
             
-            webui_manager.test_chat_history.append([
-                None,
-                "🎯 **Agent execution completed successfully!**\n\nPage exploration finished. Elements discovered and ready for script generation."
-            ])
+            webui_manager.test_chat_history.append({
+                "role": "assistant",
+                "content": "🎯 **Agent execution completed successfully!**\n\nPage exploration finished. Elements discovered and ready for script generation."
+            })
             
         except asyncio.TimeoutError:
-            webui_manager.test_chat_history.append([
-                None,
-                "⏰ **Agent execution timed out** after 2 minutes\n\n💡 This might be normal for complex pages. Proceeding with discovered elements..."
-            ])
+            webui_manager.test_chat_history.append({
+                "role": "assistant",
+                "content": "⏰ **Agent execution timed out** after 2 minutes\n\n💡 This might be normal for complex pages. Proceeding with discovered elements..."
+            })
         except Exception as agent_error:
-            webui_manager.test_chat_history.append([
-                None,
-                f"⚠️ **Agent execution error:** {str(agent_error)}\n\n🔄 Continuing with discovered elements..."
-            ])
+            webui_manager.test_chat_history.append({
+                "role": "assistant",
+                "content": f"⚠️ **Agent execution error:** {str(agent_error)}\n\n🔄 Continuing with discovered elements..."
+            })
         
         # Clean up browser
         await context.close()
@@ -473,10 +476,10 @@ async def _explore_page_and_discover_elements(
             elements_summary += f"• {desc}: `{selector}`\n"
         elements_summary += f"\n📝 **Generating Playwright script with real locators...**"
         
-        webui_manager.test_chat_history.append([
-            None,
-            elements_summary
-        ])
+        webui_manager.test_chat_history.append({
+            "role": "assistant",
+            "content": elements_summary
+        })
         
         # Generate script with discovered locators
         test_case.playwright_script = IntelligentScriptGenerator.generate_script_with_real_locators(test_case)
@@ -488,10 +491,10 @@ async def _explore_page_and_discover_elements(
         
     except Exception as e:
         test_case.status = "failed"
-        webui_manager.test_chat_history.append([
-            None,
-            f"❌ **Exploration failed:** {str(e)}"
-        ])
+        webui_manager.test_chat_history.append({
+            "role": "assistant",
+            "content": f"❌ **Exploration failed:** {str(e)}"
+        })
         
         yield {
             status_comp: gr.update(value="❌ Exploration Failed"),
@@ -745,7 +748,8 @@ Check that user is redirected to dashboard""",
                     height=300,
                     show_label=True,
                     container=True,
-                    show_copy_button=True
+                    show_copy_button=True,
+                    type="messages"
                 )
             
             with gr.Column():
