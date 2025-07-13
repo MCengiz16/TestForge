@@ -21,6 +21,7 @@ from src.browser.custom_browser import CustomBrowser
 from src.controller.custom_controller import CustomController
 from src.utils import llm_provider
 from src.webui.webui_manager import WebuiManager
+from src.webui.components.test_settings_tab import get_current_ai_prompt, get_current_playwright_config
 
 logger = logging.getLogger(__name__)
 
@@ -310,44 +311,123 @@ test.describe('{test_case.name}', () => {{
         return 'button, input[type="button"], .btn'
 
 
+def _load_ai_prompt_template() -> str:
+    """Load AI prompt template from current UI state"""
+    return get_current_ai_prompt()
+
+def _get_default_ai_prompt() -> str:
+    """Get default AI prompt template"""
+    return """You are an expert Playwright test automation engineer. 
+
+Please analyze this test case and generate a complete, professional Playwright test script.
+
+TEST CASE:
+Name: {test_case_name}
+URL: {test_case_url}
+Steps:
+{test_case_steps}
+
+{discovered_elements}
+
+REQUIREMENTS:
+1. Generate a complete Playwright test script in JavaScript
+2. Use proper selectors (IDs, CSS selectors, or text-based locators)
+3. Include proper error handling and waits (timeouts are configured globally)
+4. Use expect() assertions for validations
+5. No screenshots needed (videos and traces are captured automatically)
+6. Make the script robust and maintainable
+7. Use standard Playwright methods: waitForSelector, click, fill, etc. (timeouts handled by config)
+
+Generate ONLY the JavaScript code, no explanations:"""
+
+def _load_playwright_config() -> str:
+    """Load Playwright configuration from current UI state"""
+    return get_current_playwright_config()
+
+def _get_default_playwright_config() -> str:
+    """Get default Playwright configuration"""
+    return """module.exports = {
+    testDir: '.',
+    timeout: 120000,
+    expect: {
+        timeout: 30000
+    },
+    use: {
+        headless: false,
+        viewport: null,
+        actionTimeout: 30000,
+        navigationTimeout: 30000,
+        waitForSelectorTimeout: 30000,
+        waitForTimeout: 30000,
+        launchOptions: {
+            args: [
+                '--start-fullscreen',
+                '--kiosk',
+                '--window-size=1920,1080',
+                '--window-position=0,0',
+                '--no-sandbox',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor'
+            ]
+        },
+        screenshot: 'off',
+        video: 'on',
+        trace: 'on',
+    },
+    reporter: [
+        ['html', { outputFolder: 'playwright-report', open: 'never' }],
+        ['json', { outputFile: 'test-results.json' }],
+        ['junit', { outputFile: 'junit-results.xml' }]
+    ],
+    outputDir: 'test-results',
+    projects: [
+        {
+            name: 'chromium',
+            use: {
+                viewport: null,
+                actionTimeout: 30000,
+                navigationTimeout: 30000,
+                waitForSelectorTimeout: 30000,
+                waitForTimeout: 30000,
+                launchOptions: {
+                    args: [
+                        '--start-fullscreen',
+                        '--kiosk',
+                        '--window-size=1920,1080',
+                        '--window-position=0,0',
+                        '--no-sandbox',
+                        '--disable-web-security',
+                        '--disable-features=VizDisplayCompositor'
+                    ]
+                },
+                screenshot: 'off',
+                video: 'on',
+                trace: 'on',
+            },
+        },
+    ],
+};"""
+
 async def _generate_script_with_ai(llm: BaseChatModel, test_case: TestCase) -> str:
     """Generate Playwright script using AI analysis of the test case"""
     
     # Prepare discovered elements summary
     elements_info = ""
     if test_case.discovered_elements:
-        elements_info = "\n\nDiscovered Elements:\n"
+        elements_info = "Discovered Elements:\n"
         for desc, selector in test_case.discovered_elements.items():
             elements_info += f"- {desc}: {selector}\n"
     
-    # Create AI prompt for script generation
-    prompt = f"""You are an expert Playwright test automation engineer. 
-
-Please analyze this test case and generate a complete, professional Playwright test script.
-
-TEST CASE:
-Name: {test_case.name}
-URL: {test_case.url}
-Steps:
-{chr(10).join([f"{i+1}. {step}" for i, step in enumerate(test_case.steps)])}
-
-{elements_info}
-
-REQUIREMENTS:
-1. Generate a complete Playwright test script in JavaScript
-2. Use proper selectors (IDs, CSS selectors, or text-based locators)
-3. Include proper error handling and waits (use 30 second timeouts for all actions)
-4. Use expect() assertions for validations
-5. No screenshots needed (videos and traces are captured automatically)
-6. Make the script robust and maintainable
-7. Use waitForSelector with 30 second timeout: await page.waitForSelector('selector', {{ timeout: 30000 }})
-8. For SauceLabs specifically, use these selectors if applicable:
-   - Username field: #user-name
-   - Password field: #password  
-   - Login button: #login-button
-   - Product elements: .inventory_item_name
-
-Generate ONLY the JavaScript code, no explanations:"""
+    # Load AI prompt template from current UI state
+    prompt_template = _load_ai_prompt_template()
+    
+    # Format the prompt with test case data
+    prompt = prompt_template.format(
+        test_case_name=test_case.name,
+        test_case_url=test_case.url,
+        test_case_steps=chr(10).join([f"{i+1}. {step}" for i, step in enumerate(test_case.steps)]),
+        discovered_elements=elements_info
+    )
 
     try:
         response = await llm.ainvoke(prompt)
@@ -674,67 +754,9 @@ async def _run_playwright_test(
         
         test_case.test_execution_log.append(f"📝 Created test file: {test_file}")
         
-        # Create Playwright config
+        # Create Playwright config from current UI state
         config_file = os.path.join(test_dir, "playwright.config.js")
-        playwright_config = f'''
-module.exports = {{
-    testDir: '.',
-    timeout: 120000,
-    expect: {{
-        timeout: 30000
-    }},
-    use: {{
-        headless: false,
-        viewport: null,
-        actionTimeout: 30000,
-        navigationTimeout: 30000,
-        launchOptions: {{
-            args: [
-                '--start-fullscreen',
-                '--kiosk',
-                '--window-size=1920,1080',
-                '--window-position=0,0',
-                '--no-sandbox',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor'
-            ]
-        }},
-        screenshot: 'off',
-        video: 'on',
-        trace: 'on',
-    }},
-    reporter: [
-        ['html', {{ outputFolder: 'playwright-report', open: 'never' }}],
-        ['json', {{ outputFile: 'test-results.json' }}],
-        ['junit', {{ outputFile: 'junit-results.xml' }}]
-    ],
-    outputDir: 'test-results',
-    projects: [
-        {{
-            name: 'chromium',
-            use: {{
-                viewport: null,
-                actionTimeout: 30000,
-                navigationTimeout: 30000,
-                launchOptions: {{
-                    args: [
-                        '--start-fullscreen',
-                        '--kiosk',
-                        '--window-size=1920,1080',
-                        '--window-position=0,0',
-                        '--no-sandbox',
-                        '--disable-web-security',
-                        '--disable-features=VizDisplayCompositor'
-                    ]
-                }},
-                screenshot: 'off',
-                video: 'on',
-                trace: 'on',
-            }},
-        }},
-    ],
-}};
-'''
+        playwright_config = _load_playwright_config()
         with open(config_file, 'w') as f:
             f.write(playwright_config)
         
