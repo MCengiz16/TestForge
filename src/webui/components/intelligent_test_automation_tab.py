@@ -343,6 +343,10 @@ async def _explore_page_and_discover_elements(
         if not llm:
             raise Exception("Failed to initialize LLM for exploration")
         
+        # Ensure DISPLAY is set for VNC visibility
+        os.environ['DISPLAY'] = ':99'
+        logger.info(f"Set DISPLAY for VNC: {os.environ.get('DISPLAY')}")
+        
         test_dir = os.path.abspath(os.path.join("./tmp/test_results", test_case.id))
         os.makedirs(test_dir, exist_ok=True)
         
@@ -366,7 +370,7 @@ async def _explore_page_and_discover_elements(
         # Step 1: Navigate and analyze page structure
         webui_manager.test_chat_history.append({
             "role": "assistant", 
-            "content": "📍 **Initializing browser and starting exploration...**\n\n🌐 Navigating to target URL..."
+            "content": "📍 **Initializing browser and starting exploration...**\n\n🖥️ **Live Browser View**: Open http://localhost:6080/vnc.html to watch the agent work!\n\n🌐 Navigating to target URL..."
         })
         yield {
             chatbot_comp: gr.update(value=webui_manager.test_chat_history)
@@ -769,9 +773,32 @@ Check that user is redirected to dashboard""",
         with gr.Row():
             with gr.Column():
                 gr.Markdown("## 🖥️ Live Agent Demonstration")
+                
+                # Embedded VNC viewer
+                vnc_viewer = gr.HTML(
+                    value='''
+                    <div style="text-align: center; padding: 10px; background: #f8f9fa; border-radius: 8px; margin: 10px 0;">
+                        <div style="background: #000; border-radius: 8px; padding: 10px; margin: 10px 0;">
+                            <iframe 
+                                src="http://localhost:6080/vnc.html?host=localhost&port=6080&autoconnect=true&resize=scale&show_dot=true"
+                                width="100%" 
+                                height="400"
+                                style="border: none; border-radius: 8px;"
+                                allow="camera; microphone; display-capture">
+                            </iframe>
+                        </div>
+                        <p style="margin: 10px 0; color: #666; font-size: 14px;">
+                            🎯 <strong>Live Browser View</strong> - Watch the AI agent work in real-time<br>
+                            If the view doesn't load, <a href="http://localhost:6080/vnc.html?host=localhost&port=6080" target="_blank">click here to open in new tab</a>
+                        </p>
+                    </div>
+                    ''',
+                    label="Embedded VNC Viewer"
+                )
+                
                 vnc_link = gr.HTML(
-                    value='<div style="text-align: center; padding: 20px; background: #f0f8ff; border: 2px solid #007bff; border-radius: 10px;"><h3 style="color: #007bff; margin: 0 0 15px 0;">👀 Watch Agent Working Live!</h3><a href="http://localhost:6080/vnc.html?host=localhost&port=6080" target="_blank" style="background: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block; margin: 10px;">🖥️ Open Live Browser View</a><br><br><p style="margin: 15px 0; color: #333;"><strong>When you click "🔍 Explore Page":</strong><br>• Agent opens browser automatically<br>• You see every click, type, and scroll<br>• Real-time element discovery</p><p style="color: #666; font-size: 14px;">VNC URL: http://localhost:6080</p></div>',
-                    label="Live Agent Browser"
+                    value='<div style="text-align: center; padding: 15px; background: #e8f4f8; border-radius: 8px; margin: 10px 0;"><p style="margin: 0; color: #333;"><strong>🔍 When you click "🚀 Create Test & Explore":</strong><br>• Agent opens browser automatically in the window above<br>• You see every click, type, and scroll<br>• Real-time element discovery and interaction</p></div>',
+                    label="Live Demo Instructions"
                 )
         
         # Logs Section
@@ -806,6 +833,7 @@ Check that user is redirected to dashboard""",
         "status": status,
         "playwright_script": playwright_script,
         "report_status": report_status,
+        "vnc_viewer": vnc_viewer,
         "vnc_link": vnc_link,
         "agent_chatbot": agent_chatbot,
         "execution_log": execution_log,
