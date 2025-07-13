@@ -752,10 +752,11 @@ Check that user is redirected to dashboard""",
                 playwright_script = gr.Code(
                     label="Playwright Test Script (with Real Locators)",
                     language="javascript",
-                    lines=15
+                    lines=15,
+                    show_label=True,
+                    container=True,
+                    interactive=True
                 )
-                
-                download_script_btn = gr.Button("💾 Download Script", variant="secondary")
                 
                 gr.Markdown("## 📊 Test Results & Reports")
                 
@@ -804,7 +805,6 @@ Check that user is redirected to dashboard""",
         "run_test_btn": run_test_btn,
         "status": status,
         "playwright_script": playwright_script,
-        "download_script_btn": download_script_btn,
         "report_status": report_status,
         "vnc_link": vnc_link,
         "agent_chatbot": agent_chatbot,
@@ -941,26 +941,4 @@ Check that user is redirected to dashboard""",
         outputs=[status, execution_log, report_status]
     )
     
-    def download_latest_script():
-        """Download the latest generated script"""
-        if not webui_manager.test_cases:
-            return None
-        
-        test_case = webui_manager.test_cases[-1]
-        if not test_case.playwright_script:
-            return None
-        
-        script_path = os.path.join("./tmp", f"{test_case.name.replace(' ', '_')}.spec.js")
-        os.makedirs("./tmp", exist_ok=True)
-        
-        with open(script_path, 'w') as f:
-            f.write(test_case.playwright_script)
-        
-        return script_path
-    
-    download_script_btn.click(
-        fn=download_latest_script,
-        inputs=[],
-        outputs=[gr.File()]
-    )
     
