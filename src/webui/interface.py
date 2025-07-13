@@ -6,6 +6,7 @@ from src.webui.components.browser_settings_tab import create_browser_settings_ta
 from src.webui.components.browser_use_agent_tab import create_browser_use_agent_tab
 from src.webui.components.deep_research_agent_tab import create_deep_research_agent_tab
 from src.webui.components.load_save_config_tab import create_load_save_config_tab
+from src.webui.components.intelligent_test_automation_tab import create_test_automation_tab
 
 theme_map = {
     "Default": gr.themes.Default(),
@@ -62,8 +63,8 @@ def create_ui(theme_name="Ocean"):
         with gr.Row():
             gr.Markdown(
                 """
-                # 🌐 Browser Use WebUI
-                ### Control your browser with AI assistance
+                # 🧪 Intelligent Test Automation Platform
+                ### AI Agent discovers real locators → Generates accurate Playwright scripts → Runs tests with original reports
                 """,
                 elem_classes=["header-text"],
             )
@@ -71,25 +72,9 @@ def create_ui(theme_name="Ocean"):
         with gr.Tabs() as tabs:
             with gr.TabItem("⚙️ Agent Settings"):
                 create_agent_settings_tab(ui_manager)
-
-            with gr.TabItem("🌐 Browser Settings"):
                 create_browser_settings_tab(ui_manager)
 
-            with gr.TabItem("🤖 Run Agent"):
-                create_browser_use_agent_tab(ui_manager)
-
-            with gr.TabItem("🎁 Agent Marketplace"):
-                gr.Markdown(
-                    """
-                    ### Agents built on Browser-Use
-                    """,
-                    elem_classes=["tab-header-text"],
-                )
-                with gr.Tabs():
-                    with gr.TabItem("Deep Research"):
-                        create_deep_research_agent_tab(ui_manager)
-
-            with gr.TabItem("📁 Load & Save Config"):
-                create_load_save_config_tab(ui_manager)
+            with gr.TabItem("🧪 Test Automation"):
+                create_test_automation_tab(ui_manager)
 
     return demo
