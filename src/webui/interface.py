@@ -70,11 +70,11 @@ def create_ui(theme_name="Ocean"):
             )
 
         with gr.Tabs() as tabs:
+            with gr.TabItem("🧪 Test Automation"):
+                create_test_automation_tab(ui_manager)
+
             with gr.TabItem("⚙️ Agent Settings"):
                 create_agent_settings_tab(ui_manager)
                 create_browser_settings_tab(ui_manager)
-
-            with gr.TabItem("🧪 Test Automation"):
-                create_test_automation_tab(ui_manager)
 
     return demo

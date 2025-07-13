@@ -267,6 +267,8 @@ test.describe('{test_case.name}', () => {{
 
 async def _initialize_llm_for_intelligent_test(webui_manager: WebuiManager, components: Dict) -> Optional[BaseChatModel]:
     """Initialize LLM for intelligent test execution"""
+    import os
+    
     def get_setting(key, default=None):
         comp = webui_manager.id_to_component.get(f"agent_settings.{key}")
         return components.get(comp, default) if comp else default
@@ -274,20 +276,42 @@ async def _initialize_llm_for_intelligent_test(webui_manager: WebuiManager, comp
     provider = get_setting("llm_provider")
     model = get_setting("llm_model_name")
     
+    # If no UI settings available, try environment variables as fallback
     if not provider or not model:
-        return None
+        logger.info("No LLM settings found in UI components, using environment variables fallback")
+        # Check for OpenAI API key
+        if os.environ.get("OPENAI_API_KEY"):
+            provider = "openai"
+            model = "gpt-4o-mini"  # Default model
+        elif os.environ.get("ANTHROPIC_API_KEY"):
+            provider = "anthropic"
+            model = "claude-3-sonnet-20240229"
+        else:
+            logger.error("No LLM provider configured in UI or environment variables")
+            return None
     
     try:
-        return llm_provider.get_llm_model(
+        # Use environment variables for credentials if not in UI
+        api_key = get_setting("llm_api_key") or os.environ.get(f"{provider.upper()}_API_KEY")
+        base_url = get_setting("llm_base_url") or os.environ.get(f"{provider.upper()}_ENDPOINT")
+        
+        logger.info(f"Initializing LLM with provider={provider}, model={model}, api_key_exists={bool(api_key)}, base_url={base_url}")
+        
+        llm = llm_provider.get_llm_model(
             provider=provider,
             model_name=model,
             temperature=get_setting("llm_temperature", 0.6),
-            base_url=get_setting("llm_base_url"),
-            api_key=get_setting("llm_api_key"),
+            base_url=base_url,
+            api_key=api_key,
             num_ctx=get_setting("ollama_num_ctx", 16000) if provider == "ollama" else None,
         )
+        
+        logger.info(f"LLM initialization successful: {type(llm)}")
+        return llm
     except Exception as e:
         logger.error(f"Failed to initialize LLM: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return None
 
 
@@ -709,19 +733,11 @@ Check that user is redirected to dashboard""",
                     lines=8
                 )
                 
-                create_btn = gr.Button("🚀 Create Test", variant="primary")
-                
                 gr.Markdown("## 🎯 Test Control")
                 
-                test_selector = gr.Dropdown(
-                    label="Select Test",
-                    choices=[],
-                    interactive=True
-                )
-                
                 with gr.Row():
-                    explore_btn = gr.Button("🔍 Explore Page", variant="secondary")
-                    run_test_btn = gr.Button("🎭 Run Playwright Test", variant="primary")
+                    create_test_btn = gr.Button("🚀 Create Test & Explore", variant="primary")
+                    run_test_btn = gr.Button("🎭 Run Playwright Test", variant="secondary")
                 
                 status = gr.Textbox(
                     label="Status",
@@ -786,9 +802,7 @@ Check that user is redirected to dashboard""",
         "test_name": test_name,
         "test_url": test_url,
         "test_steps": test_steps,
-        "create_btn": create_btn,
-        "test_selector": test_selector,
-        "explore_btn": explore_btn,
+        "create_test_btn": create_test_btn,
         "run_test_btn": run_test_btn,
         "status": status,
         "playwright_script": playwright_script,
@@ -802,32 +816,36 @@ Check that user is redirected to dashboard""",
     
     webui_manager.add_components("test_automation", tab_components)
     
+    # Get all components for event handlers
+    all_components = list(webui_manager.get_components())
+    
     # Event handlers
-    def create_test(name, url, steps_text):
-        """Create new test case"""
+    async def create_test_and_explore(name, url, steps_text, *components_values):
+        """Create new test case and automatically start exploration"""
         if not name or not url or not steps_text:
-            return {
-                test_selector: gr.update(choices=[]),
-                status: gr.update(value="❌ Please fill all fields")
-            }
+            yield gr.update(value="❌ Please fill all fields"), gr.update(), gr.update()
+            return
         
         steps = [line.strip() for line in steps_text.strip().split('\n') if line.strip()]
         
         if not steps:
-            return {
-                test_selector: gr.update(choices=[]),
-                status: gr.update(value="❌ No valid steps found")
-            }
+            yield gr.update(value="❌ No valid steps found"), gr.update(), gr.update()
+            return
         
+        # Create test case
         test_case = TestCase(name=name, description="", url=url, steps=steps)
         webui_manager.test_cases.append(test_case)
         
-        choices = [(tc.name, tc.id) for tc in webui_manager.test_cases]
+        yield gr.update(value=f"✅ Created: {name} - Starting exploration..."), gr.update(), gr.update()
         
-        return {
-            test_selector: gr.update(choices=choices, value=test_case.id),
-            status: gr.update(value=f"✅ Created: {name} (Ready for exploration)")
-        }
+        # Start exploration automatically
+        components_dict = dict(zip(all_components, components_values))
+        async for update in _explore_page_and_discover_elements(webui_manager, test_case, components_dict):
+            # Extract updates for each component
+            status_update = update.get(status, gr.update())
+            chatbot_update = update.get(agent_chatbot, gr.update())
+            script_update = gr.update(value=test_case.playwright_script) if test_case.playwright_script else gr.update()
+            yield status_update, chatbot_update, script_update
     
     async def explore_page(test_id, components_dict):
         """Start page exploration phase"""
@@ -846,23 +864,23 @@ Check that user is redirected to dashboard""",
                 update[playwright_script] = gr.update(value=test_case.playwright_script)
             yield update
     
-    async def run_playwright_test(test_id):
-        """Run the generated Playwright test"""
-        if not test_id:
-            yield {status: gr.update(value="❌ No test selected")}
+    async def run_latest_playwright_test():
+        """Run the generated Playwright test for the latest test case"""
+        if not webui_manager.test_cases:
+            yield gr.update(value="❌ No test created. Please create a test first."), gr.update()
             return
         
-        test_case = next((tc for tc in webui_manager.test_cases if tc.id == test_id), None)
-        if not test_case:
-            yield {status: gr.update(value="❌ Test not found")}
-            return
+        test_case = webui_manager.test_cases[-1]  # Get the latest test case
         
         if test_case.status != "script_ready":
-            yield {status: gr.update(value="❌ Must explore page first")}
+            yield gr.update(value="❌ Must explore page first. Click 'Create Test & Explore'."), gr.update()
             return
         
         async for update in _run_playwright_test(webui_manager, test_case):
-            yield update
+            # Extract updates for each component
+            status_update = update.get(status, gr.update())
+            log_update = update.get(execution_log, gr.update())
+            yield status_update, log_update
     
     def update_script_display(test_id):
         """Update script display when test is selected"""
@@ -906,58 +924,56 @@ Check that user is redirected to dashboard""",
         return report_url
     
     # Connect events
-    all_components = set(webui_manager.get_components())
-    
-    create_btn.click(
-        fn=create_test,
-        inputs=[test_name, test_url, test_steps],
-        outputs=[test_selector, status]
-    )
-    
-    async def explore_wrapper(test_id, *components_values):
-        components_dict = dict(zip(all_components, components_values))
-        async for update in explore_page(test_id, components_dict):
-            yield update
-    
-    explore_btn.click(
-        fn=explore_wrapper,
-        inputs=[test_selector] + list(all_components),
+    create_test_btn.click(
+        fn=create_test_and_explore,
+        inputs=[test_name, test_url, test_steps] + list(all_components),
         outputs=[status, agent_chatbot, playwright_script]
     )
     
-    async def run_test_wrapper(test_id):
-        async for update in run_playwright_test(test_id):
-            yield update
-    
     run_test_btn.click(
-        fn=run_test_wrapper,
-        inputs=[test_selector],
+        fn=run_latest_playwright_test,
+        inputs=[],
         outputs=[status, execution_log]
     )
     
-    test_selector.change(
-        fn=update_script_display,
-        inputs=[test_selector],
-        outputs=[playwright_script]
-    )
+    def download_latest_script():
+        """Download the latest generated script"""
+        if not webui_manager.test_cases:
+            return None
+        
+        test_case = webui_manager.test_cases[-1]
+        if not test_case.playwright_script:
+            return None
+        
+        script_path = os.path.join("./tmp", f"{test_case.name.replace(' ', '_')}.spec.js")
+        os.makedirs("./tmp", exist_ok=True)
+        
+        with open(script_path, 'w') as f:
+            f.write(test_case.playwright_script)
+        
+        return script_path
     
     download_script_btn.click(
-        fn=download_script,
-        inputs=[test_selector],
+        fn=download_latest_script,
+        inputs=[],
         outputs=[gr.File()]
     )
     
-    def open_report_in_new_tab(test_id):
-        """Return JavaScript to open report in new tab"""
-        report_url = view_report(test_id)
-        if report_url:
-            return f"window.open('{report_url}', '_blank')"
-        else:
+    def open_latest_report_in_new_tab():
+        """Return JavaScript to open the latest report in new tab"""
+        if not webui_manager.test_cases:
+            return "alert('No test available. Please create a test first.')"
+        
+        test_case = webui_manager.test_cases[-1]
+        if not test_case.playwright_report_path:
             return "alert('No report available. Please run a test first.')"
+        
+        report_url = f"http://localhost:7789/reports/{test_case.id}/playwright-report/index.html"
+        return f"window.open('{report_url}', '_blank')"
     
     view_report_btn.click(
-        fn=open_report_in_new_tab,
-        inputs=[test_selector],
+        fn=open_latest_report_in_new_tab,
+        inputs=[],
         outputs=[],
         js="(js_command) => eval(js_command)"
     )
