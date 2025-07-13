@@ -9,6 +9,7 @@ services:
         TARGETPLATFORM: ${TARGETPLATFORM:-linux/amd64}
     ports:
       - "7788:7788"
+      - "7789:7789"
       - "6080:6080"
       - "5901:5901"
       - "9222:9222"

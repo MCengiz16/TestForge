@@ -319,7 +319,7 @@ async def _explore_page_and_discover_elements(
         if not llm:
             raise Exception("Failed to initialize LLM for exploration")
         
-        test_dir = os.path.join("./tmp/test_results", test_case.id)
+        test_dir = os.path.abspath(os.path.join("./tmp/test_results", test_case.id))
         os.makedirs(test_dir, exist_ok=True)
         
         browser_config = BrowserConfig(
@@ -510,7 +510,7 @@ async def _run_playwright_test(
     
     status_comp = webui_manager.get_component_by_id("test_automation.status")
     execution_log_comp = webui_manager.get_component_by_id("test_automation.execution_log")
-    report_comp = webui_manager.get_component_by_id("test_automation.test_report")
+    # report_comp = webui_manager.get_component_by_id("test_automation.test_report")
     
     test_case.status = "test_running"
     test_case.test_execution_log = ["🎭 Running Playwright test with discovered locators..."]
@@ -522,7 +522,7 @@ async def _run_playwright_test(
     
     try:
         # Create test directory and files
-        test_dir = os.path.join("./tmp/test_results", test_case.id)
+        test_dir = os.path.abspath(os.path.join("./tmp/test_results", test_case.id))
         os.makedirs(test_dir, exist_ok=True)
         
         # Write the test script
@@ -541,15 +541,27 @@ module.exports = {{
     use: {{
         headless: true,
         viewport: {{ width: 1280, height: 720 }},
-        screenshot: 'on-failure',
-        video: 'retain-on-failure',
+        screenshot: 'on',
+        video: 'on',
+        trace: 'on',
     }},
     reporter: [
-        ['html', {{ outputFolder: 'playwright-report' }}],
+        ['html', {{ outputFolder: 'playwright-report', open: 'never' }}],
         ['json', {{ outputFile: 'test-results.json' }}],
         ['junit', {{ outputFile: 'junit-results.xml' }}]
     ],
     outputDir: 'test-results',
+    projects: [
+        {{
+            name: 'chromium',
+            use: {{
+                ...require('@playwright/test').devices['Desktop Chrome'],
+                screenshot: 'on',
+                video: 'on',
+                trace: 'on',
+            }},
+        }},
+    ],
 }};
 '''
         with open(config_file, 'w') as f:
@@ -574,6 +586,17 @@ module.exports = {{
             test_case.test_execution_log.append(f"⚠️ npm install warning: {result.stderr}")
         else:
             test_case.test_execution_log.append("✅ Playwright installed successfully")
+        
+        # Install Playwright browsers
+        test_case.test_execution_log.append("🌐 Installing Playwright browsers...")
+        
+        browsers_cmd = ["npx", "playwright", "install", "chromium"]
+        result = subprocess.run(browsers_cmd, cwd=test_dir, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            test_case.test_execution_log.append(f"⚠️ Browser install error: {result.stderr}")
+        else:
+            test_case.test_execution_log.append("✅ Chromium browser installed successfully")
         
         yield {
             execution_log_comp: gr.update(value="\n".join(test_case.test_execution_log))
@@ -623,16 +646,16 @@ module.exports = {{
         test_case.status = "completed"
         test_case.test_execution_log.append("🎉 Test execution completed!")
         
-        # Add direct report link
+        # Add web-accessible report link
         if os.path.exists(report_index):
-            report_url = f"file://{os.path.abspath(report_index)}"
-            test_case.test_execution_log.append(f"🔗 Direct Report Link: {report_url}")
-            test_case.test_execution_log.append("💡 Click the link above to open the full Playwright report")
+            # Create a web-accessible URL for the report
+            report_url = f"http://localhost:7789/reports/{test_case.id}/playwright-report/index.html"
+            test_case.test_execution_log.append(f"🔗 Report URL: {report_url}")
+            test_case.test_execution_log.append("💡 Click 'View Report' button below to open the full Playwright report with screenshots and videos")
         
         yield {
             status_comp: gr.update(value="🎉 Test Completed"),
-            execution_log_comp: gr.update(value="\n".join(test_case.test_execution_log)),
-            report_comp: gr.File(value=report_index if os.path.exists(report_index) else None)
+            execution_log_comp: gr.update(value="\n".join(test_case.test_execution_log))
         }
         
     except Exception as e:
@@ -720,17 +743,12 @@ Check that user is redirected to dashboard""",
                 
                 gr.Markdown("## 📊 Test Results & Reports")
                 
-                test_report = gr.File(
-                    label="Download Playwright HTML Report",
-                    file_types=[".html"]
-                )
+                view_report_btn = gr.Button("👁️ View Playwright Report", variant="primary", size="lg")
                 
-                report_links = gr.HTML(
-                    value='<div style="padding: 15px; background: #f8f9fa; border-radius: 8px; margin: 10px 0;"><p style="margin: 0; color: #666;">📊 After test completion, direct report links will appear in the execution log below</p></div>',
-                    label="Direct Report Access"
+                report_status = gr.HTML(
+                    value='<div style="padding: 15px; background: #f8f9fa; border-radius: 8px; margin: 10px 0;"><p style="margin: 0; color: #666;">📊 After test completion, click "View Playwright Report" to access the full report with screenshots and videos</p></div>',
+                    label="Report Access Info"
                 )
-                
-                view_report_btn = gr.Button("👁️ View Report", variant="secondary")
         
         # Live Browser View Section
         with gr.Row():
@@ -775,8 +793,7 @@ Check that user is redirected to dashboard""",
         "status": status,
         "playwright_script": playwright_script,
         "download_script_btn": download_script_btn,
-        "test_report": test_report,
-        "report_links": report_links,
+        "report_status": report_status,
         "view_report_btn": view_report_btn,
         "vnc_link": vnc_link,
         "agent_chatbot": agent_chatbot,
@@ -876,7 +893,7 @@ Check that user is redirected to dashboard""",
         return script_path
     
     def view_report(test_id):
-        """Open the Playwright HTML report"""
+        """Generate web-accessible URL for the Playwright HTML report"""
         if not test_id:
             return None
         
@@ -884,7 +901,9 @@ Check that user is redirected to dashboard""",
         if not test_case or not test_case.playwright_report_path:
             return None
         
-        return test_case.playwright_report_path
+        # Return web-accessible URL instead of file path
+        report_url = f"http://localhost:7789/reports/{test_case.id}/playwright-report/index.html"
+        return report_url
     
     # Connect events
     all_components = set(webui_manager.get_components())
@@ -913,7 +932,7 @@ Check that user is redirected to dashboard""",
     run_test_btn.click(
         fn=run_test_wrapper,
         inputs=[test_selector],
-        outputs=[status, execution_log, test_report]
+        outputs=[status, execution_log]
     )
     
     test_selector.change(
@@ -928,8 +947,17 @@ Check that user is redirected to dashboard""",
         outputs=[gr.File()]
     )
     
+    def open_report_in_new_tab(test_id):
+        """Return JavaScript to open report in new tab"""
+        report_url = view_report(test_id)
+        if report_url:
+            return f"window.open('{report_url}', '_blank')"
+        else:
+            return "alert('No report available. Please run a test first.')"
+    
     view_report_btn.click(
-        fn=view_report,
+        fn=open_report_in_new_tab,
         inputs=[test_selector],
-        outputs=[gr.File()]
+        outputs=[],
+        js="(js_command) => eval(js_command)"
     )
