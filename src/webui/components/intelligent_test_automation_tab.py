@@ -568,7 +568,18 @@ module.exports = {{
     timeout: 30000,
     use: {{
         headless: false,
-        viewport: {{ width: 1920, height: 1080 }},
+        viewport: null,
+        launchOptions: {{
+            args: [
+                '--start-fullscreen',
+                '--kiosk',
+                '--window-size=1920,1080',
+                '--window-position=0,0',
+                '--no-sandbox',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor'
+            ]
+        }},
         screenshot: 'on',
         video: 'on',
         trace: 'on',
@@ -583,8 +594,18 @@ module.exports = {{
         {{
             name: 'chromium',
             use: {{
-                ...require('@playwright/test').devices['Desktop Chrome'],
-                viewport: {{ width: 1920, height: 1080 }},
+                viewport: null,
+                launchOptions: {{
+                    args: [
+                        '--start-fullscreen',
+                        '--kiosk',
+                        '--window-size=1920,1080',
+                        '--window-position=0,0',
+                        '--no-sandbox',
+                        '--disable-web-security',
+                        '--disable-features=VizDisplayCompositor'
+                    ]
+                }},
                 screenshot: 'on',
                 video: 'on',
                 trace: 'on',
