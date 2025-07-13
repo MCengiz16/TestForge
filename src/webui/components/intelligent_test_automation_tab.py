@@ -567,7 +567,7 @@ module.exports = {{
     testDir: '.',
     timeout: 30000,
     use: {{
-        headless: true,
+        headless: false,
         viewport: {{ width: 1280, height: 720 }},
         screenshot: 'on',
         video: 'on',
@@ -632,9 +632,14 @@ module.exports = {{
         
         # Run the test
         test_case.test_execution_log.append("🚀 Executing Playwright test...")
+        test_case.test_execution_log.append("🖥️ Test will be visible in the Live Agent Demonstration window above!")
+        
+        # Set environment for headed mode display
+        test_env = os.environ.copy()
+        test_env['DISPLAY'] = ':99'
         
         test_cmd = ["npx", "playwright", "test", "--config", "playwright.config.js"]
-        result = subprocess.run(test_cmd, cwd=test_dir, capture_output=True, text=True)
+        result = subprocess.run(test_cmd, cwd=test_dir, capture_output=True, text=True, env=test_env)
         
         test_case.test_execution_log.append(f"📊 Test execution completed with exit code: {result.returncode}")
         
