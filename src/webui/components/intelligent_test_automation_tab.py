@@ -867,20 +867,28 @@ Check that user is redirected to dashboard""",
     async def run_latest_playwright_test():
         """Run the generated Playwright test for the latest test case"""
         if not webui_manager.test_cases:
-            yield gr.update(value="❌ No test created. Please create a test first."), gr.update()
+            yield gr.update(value="❌ No test created. Please create a test first."), gr.update(), gr.update()
             return
         
         test_case = webui_manager.test_cases[-1]  # Get the latest test case
         
         if test_case.status != "script_ready":
-            yield gr.update(value="❌ Must explore page first. Click 'Create Test & Explore'."), gr.update()
+            yield gr.update(value="❌ Must explore page first. Click 'Create Test & Explore'."), gr.update(), gr.update()
             return
         
         async for update in _run_playwright_test(webui_manager, test_case):
             # Extract updates for each component
             status_update = update.get(status, gr.update())
             log_update = update.get(execution_log, gr.update())
-            yield status_update, log_update
+            
+            # Check if test completed and update report status
+            if test_case.status == "completed" and test_case.playwright_report_path:
+                report_url = f"http://localhost:7789/reports/{test_case.id}/playwright-report/index.html"
+                report_update = gr.update(value=f'<div style="padding: 15px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; margin: 10px 0;"><p style="margin: 0; color: #155724;"><strong>✅ Report Available!</strong><br>📊 Playwright report with screenshots and videos is ready.<br>🔗 <a href="{report_url}" target="_blank">Click here to open report</a> or use the button below.</p></div>')
+            else:
+                report_update = gr.update()
+                
+            yield status_update, log_update, report_update
     
     def update_script_display(test_id):
         """Update script display when test is selected"""
@@ -933,7 +941,7 @@ Check that user is redirected to dashboard""",
     run_test_btn.click(
         fn=run_latest_playwright_test,
         inputs=[],
-        outputs=[status, execution_log]
+        outputs=[status, execution_log, report_status]
     )
     
     def download_latest_script():
@@ -965,10 +973,15 @@ Check that user is redirected to dashboard""",
             return "alert('No test available. Please create a test first.')"
         
         test_case = webui_manager.test_cases[-1]
-        if not test_case.playwright_report_path:
+        
+        # Build the report URL regardless of whether playwright_report_path is set
+        # This handles cases where the test completed but the path wasn't updated in the UI
+        report_url = f"http://localhost:7789/reports/{test_case.id}/playwright-report/index.html"
+        
+        # Check if test has been run (either has report path or has completed status)
+        if not test_case.playwright_report_path and test_case.status not in ["completed", "script_ready"]:
             return "alert('No report available. Please run a test first.')"
         
-        report_url = f"http://localhost:7789/reports/{test_case.id}/playwright-report/index.html"
         return f"window.open('{report_url}', '_blank')"
     
     view_report_btn.click(
