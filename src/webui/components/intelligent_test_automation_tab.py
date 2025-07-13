@@ -649,7 +649,9 @@ def create_test_automation_tab(webui_manager: WebuiManager):
     """Create intelligent test automation interface"""
     
     webui_manager.test_cases = []
-    webui_manager.test_chat_history = []  # For agent steps display
+    webui_manager.test_chat_history = [
+        {"role": "assistant", "content": "Welcome to Intelligent Test Automation! Create a test to get started."}
+    ]  # Initialize with proper message format
     
     with gr.Column():
         gr.Markdown("# 🧪 Intelligent Test Automation", elem_classes=["tab-header-text"])
@@ -749,7 +751,8 @@ Check that user is redirected to dashboard""",
                     show_label=True,
                     container=True,
                     show_copy_button=True,
-                    type="messages"
+                    type="messages",
+                    value=[{"role": "assistant", "content": "Agent steps will appear here during exploration..."}]
                 )
             
             with gr.Column():
