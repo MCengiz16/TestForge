@@ -759,10 +759,8 @@ Check that user is redirected to dashboard""",
                 
                 gr.Markdown("## 📊 Test Results & Reports")
                 
-                view_report_btn = gr.Button("👁️ View Playwright Report", variant="primary", size="lg")
-                
                 report_status = gr.HTML(
-                    value='<div style="padding: 15px; background: #f8f9fa; border-radius: 8px; margin: 10px 0;"><p style="margin: 0; color: #666;">📊 After test completion, click "View Playwright Report" to access the full report with screenshots and videos</p></div>',
+                    value='<div style="padding: 15px; background: #f8f9fa; border-radius: 8px; margin: 10px 0;"><p style="margin: 0; color: #666;">📊 After test completion, the report link will appear here with screenshots and videos</p></div>',
                     label="Report Access Info"
                 )
         
@@ -808,7 +806,6 @@ Check that user is redirected to dashboard""",
         "playwright_script": playwright_script,
         "download_script_btn": download_script_btn,
         "report_status": report_status,
-        "view_report_btn": view_report_btn,
         "vnc_link": vnc_link,
         "agent_chatbot": agent_chatbot,
         "execution_log": execution_log,
@@ -967,26 +964,3 @@ Check that user is redirected to dashboard""",
         outputs=[gr.File()]
     )
     
-    def open_latest_report_in_new_tab():
-        """Return JavaScript to open the latest report in new tab"""
-        if not webui_manager.test_cases:
-            return "alert('No test available. Please create a test first.')"
-        
-        test_case = webui_manager.test_cases[-1]
-        
-        # Build the report URL regardless of whether playwright_report_path is set
-        # This handles cases where the test completed but the path wasn't updated in the UI
-        report_url = f"http://localhost:7789/reports/{test_case.id}/playwright-report/index.html"
-        
-        # Check if test has been run (either has report path or has completed status)
-        if not test_case.playwright_report_path and test_case.status not in ["completed", "script_ready"]:
-            return "alert('No report available. Please run a test first.')"
-        
-        return f"window.open('{report_url}', '_blank')"
-    
-    view_report_btn.click(
-        fn=open_latest_report_in_new_tab,
-        inputs=[],
-        outputs=[],
-        js="(js_command) => eval(js_command)"
-    )
