@@ -354,8 +354,8 @@ async def _explore_page_and_discover_elements(
             headless=False,  # Show browser in action
             disable_security=True,
             new_context_config=BrowserContextConfig(
-                window_width=1280,
-                window_height=720,
+                window_width=1920,
+                window_height=1080,
                 save_recording_path=test_dir,
             )
         )
@@ -363,8 +363,8 @@ async def _explore_page_and_discover_elements(
         browser = CustomBrowser(config=browser_config)
         context = await browser.new_context(config=BrowserContextConfig(
             save_recording_path=test_dir,
-            window_width=1280,
-            window_height=720,
+            window_width=1920,
+            window_height=1080,
         ))
         
         # Step 1: Navigate and analyze page structure
@@ -568,7 +568,7 @@ module.exports = {{
     timeout: 30000,
     use: {{
         headless: false,
-        viewport: {{ width: 1280, height: 720 }},
+        viewport: {{ width: 1920, height: 1080 }},
         screenshot: 'on',
         video: 'on',
         trace: 'on',
@@ -584,6 +584,7 @@ module.exports = {{
             name: 'chromium',
             use: {{
                 ...require('@playwright/test').devices['Desktop Chrome'],
+                viewport: {{ width: 1920, height: 1080 }},
                 screenshot: 'on',
                 video: 'on',
                 trace: 'on',
@@ -787,7 +788,7 @@ Check that user is redirected to dashboard""",
                             <iframe 
                                 src="http://localhost:6080/vnc.html?host=localhost&port=6080&autoconnect=true&resize=scale&show_dot=true"
                                 width="100%" 
-                                height="400"
+                                height="600"
                                 style="border: none; border-radius: 8px;"
                                 allow="camera; microphone; display-capture">
                             </iframe>
