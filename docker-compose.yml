@@ -66,9 +66,9 @@ services:
       - VNC_PASSWORD=${VNC_PASSWORD:-youvncpassword}
 
     volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix
       - ./settings:/root # Persist settings files
       # - ./my_chrome_data:/app/data/chrome_data # Optional: persist browser data
+      # Note: X11 volume mount removed for cross-platform compatibility
     restart: unless-stopped
     shm_size: '2gb'
     cap_add:

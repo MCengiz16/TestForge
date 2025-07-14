@@ -97,6 +97,13 @@ test.describe('User Login Flow', () => {
 - Docker & Docker Compose
 - OpenAI API key (or other supported LLM provider)
 
+### Platform Support
+- ✅ **Linux**: Full support with native X11
+- ✅ **macOS**: Full support via VNC (recommended)
+- ✅ **Windows**: Full support via VNC (recommended)
+
+> **Note**: Live browser viewing works through VNC on all platforms at http://localhost:6080
+
 ## 💾 Settings
 
 Settings are stored locally in a `settings/` directory and persist across restarts. Your API keys and configuration are never committed to git.
