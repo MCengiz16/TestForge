@@ -3,9 +3,6 @@ import gradio as gr
 from src.webui.webui_manager import WebuiManager
 from src.webui.components.agent_settings_tab import create_agent_settings_tab
 from src.webui.components.browser_settings_tab import create_browser_settings_tab
-from src.webui.components.browser_use_agent_tab import create_browser_use_agent_tab
-from src.webui.components.deep_research_agent_tab import create_deep_research_agent_tab
-from src.webui.components.load_save_config_tab import create_load_save_config_tab
 from src.webui.components.intelligent_test_automation_tab import create_test_automation_tab
 
 theme_map = {
@@ -58,13 +55,13 @@ def create_ui(theme_name="Ocean"):
     ui_manager = WebuiManager()
 
     with gr.Blocks(
-            title="Browser Use WebUI", theme=theme_map[theme_name], css=css, js=js_func,
+            title="TestForge - Intelligent Test Automation", theme=theme_map[theme_name], css=css, js=js_func,
     ) as demo:
         with gr.Row():
             gr.Markdown(
                 """
-                # 🧪 Intelligent Test Automation Platform
-                ### AI Agent discovers real locators → Generates accurate Playwright scripts → Runs tests with original reports
+                # 🧪 TestForge - Intelligent Test Automation
+                ### AI Agent discovers real locators → Generates accurate Playwright scripts → Runs tests with reports
                 """,
                 elem_classes=["header-text"],
             )
