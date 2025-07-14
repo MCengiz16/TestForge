@@ -1,0 +1,7 @@
+{
+  "llm_provider": "openai",
+  "llm_model_name": "gpt-4o-mini",
+  "llm_api_key": "sk-your-api-key-here",
+  "llm_base_url": "https://api.openai.com/v1",
+  "llm_temperature": 0.6
+}

@@ -140,6 +140,8 @@ TARGETPLATFORM=linux/arm64 docker compose up --build
 ```
 
 #### Step 4: Configure Settings
+> 📁 **Note**: A `settings/` directory will be automatically created to store your personal configuration (not tracked by git)
+
 1. **Access the WebUI:** Open your web browser and navigate to `http://127.0.0.1:7788`
 2. **Configure LLM Settings:** Go to the "🔧 Agent Settings" tab
    - Set your LLM provider (OpenAI, Anthropic, etc.)
@@ -150,7 +152,8 @@ TARGETPLATFORM=linux/arm64 docker compose up --build
    - Modify Playwright configuration
    - Click "💾 Save to File" to persist
 
-📖 **For detailed settings configuration, see [SETTINGS.md](SETTINGS.md)**
+📖 **For detailed settings configuration, see [SETTINGS.md](SETTINGS.md)**  
+📁 **For settings structure examples, see [settings-example/](settings-example/)**
 
 #### Step 5: Enjoy the web-ui and vnc
 - Web-UI: Open `http://localhost:7788` in your browser

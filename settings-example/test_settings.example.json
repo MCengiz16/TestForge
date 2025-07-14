@@ -1,0 +1,4 @@
+{
+  "ai_prompt": "You are an expert Playwright test automation engineer...",
+  "playwright_config": "module.exports = {\n    testDir: '.',\n    timeout: 120000,\n    expect: {\n        timeout: 30000\n    },\n    use: {\n        headless: false,\n        viewport: { width: 1920, height: 1080 },\n        actionTimeout: 30000,\n        navigationTimeout: 30000,\n        screenshot: 'off',\n        video: 'on',\n        trace: 'on'\n    },\n    reporter: [\n        ['html', { outputFolder: 'playwright-report', open: 'never' }],\n        ['json', { outputFile: 'test-results.json' }]\n    ],\n    outputDir: 'test-results'\n};"
+}
