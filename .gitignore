@@ -189,3 +189,14 @@ data/
 *.pdf
 
 workflow
+
+# User Settings (Private - Not for Git)
+settings/
+.webui_agent_settings.json
+.webui_test_settings.json
+*.settings.json
+
+# Environment Files (Private - Not for Git)
+.env
+.env.local
+.env.*.local

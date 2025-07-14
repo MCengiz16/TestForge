@@ -67,6 +67,7 @@ services:
 
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
+      - ./settings:/root # Persist settings files
       # - ./my_chrome_data:/app/data/chrome_data # Optional: persist browser data
     restart: unless-stopped
     shm_size: '2gb'

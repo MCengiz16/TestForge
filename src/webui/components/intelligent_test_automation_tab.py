@@ -961,39 +961,69 @@ test.describe('{test_case.name}', () => {{
 async def _initialize_llm_for_intelligent_test(webui_manager: WebuiManager, components: Dict) -> Optional[BaseChatModel]:
     """Initialize LLM for intelligent test execution"""
     import os
+    import json
     
     def get_setting(key, default=None):
         comp = webui_manager.id_to_component.get(f"agent_settings.{key}")
         return components.get(comp, default) if comp else default
 
+    def load_saved_agent_settings():
+        """Load settings from saved file as fallback"""
+        try:
+            settings_file = os.path.join(os.path.expanduser('~'), '.webui_agent_settings.json')
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not load saved settings: {e}")
+        return {}
+
     provider = get_setting("llm_provider")
     model = get_setting("llm_model_name")
+    api_key = get_setting("llm_api_key") 
+    base_url = get_setting("llm_base_url")
+    temperature = get_setting("llm_temperature", 0.6)
     
-    # If no UI settings available, try environment variables as fallback
-    if not provider or not model:
-        logger.info("No LLM settings found in UI components, using environment variables fallback")
+    # If no UI settings available, try saved settings file as fallback
+    if not provider or not model or not api_key:
+        logger.info("No LLM settings found in UI components, checking saved settings file...")
+        saved_settings = load_saved_agent_settings()
+        
+        if saved_settings:
+            provider = provider or saved_settings.get('llm_provider')
+            model = model or saved_settings.get('llm_model_name')
+            api_key = api_key or saved_settings.get('llm_api_key')
+            base_url = base_url or saved_settings.get('llm_base_url')
+            temperature = temperature if temperature != 0.6 else saved_settings.get('llm_temperature', 0.6)
+            logger.info(f"Loaded settings from file: provider={provider}, model={model}, api_key_exists={bool(api_key)}")
+    
+    # If still no settings, try environment variables as final fallback
+    if not provider or not model or not api_key:
+        logger.info("No LLM settings found in UI or saved file, using environment variables fallback")
         # Check for OpenAI API key
         if os.environ.get("OPENAI_API_KEY"):
-            provider = "openai"
-            model = "gpt-4o-mini"  # Default model
+            provider = provider or "openai"
+            model = model or "gpt-4o-mini"  # Default model
+            api_key = api_key or os.environ.get("OPENAI_API_KEY")
         elif os.environ.get("ANTHROPIC_API_KEY"):
-            provider = "anthropic"
-            model = "claude-3-sonnet-20240229"
+            provider = provider or "anthropic"
+            model = model or "claude-3-sonnet-20240229"
+            api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         else:
-            logger.error("No LLM provider configured in UI or environment variables")
+            logger.error("No LLM provider configured in UI, saved settings, or environment variables")
             return None
     
     try:
-        # Use environment variables for credentials if not in UI
-        api_key = get_setting("llm_api_key") or os.environ.get(f"{provider.upper()}_API_KEY")
-        base_url = get_setting("llm_base_url") or os.environ.get(f"{provider.upper()}_ENDPOINT")
+        # Use environment variables for credentials if still not found
+        api_key = api_key or os.environ.get(f"{provider.upper()}_API_KEY")
+        base_url = base_url or os.environ.get(f"{provider.upper()}_ENDPOINT")
         
         logger.info(f"Initializing LLM with provider={provider}, model={model}, api_key_exists={bool(api_key)}, base_url={base_url}")
         
         llm = llm_provider.get_llm_model(
             provider=provider,
             model_name=model,
-            temperature=get_setting("llm_temperature", 0.6),
+            temperature=temperature,
             base_url=base_url,
             api_key=api_key,
             num_ctx=get_setting("ollama_num_ctx", 16000) if provider == "ollama" else None,
@@ -1275,30 +1305,32 @@ async def _run_playwright_test(
             execution_log_comp: gr.update(value="\n".join(test_case.test_execution_log))
         }
         
-        # Install Playwright if needed
-        test_case.test_execution_log.append("📦 Installing Playwright dependencies...")
+        # Check if Playwright is already available globally (Docker pre-installed)
+        test_case.test_execution_log.append("📦 Checking Playwright availability...")
         
-        install_cmd = ["npm", "init", "-y"]
-        subprocess.run(install_cmd, cwd=test_dir, capture_output=True)
+        # Try global Playwright first
+        check_cmd = ["playwright", "--version"]
+        result = subprocess.run(check_cmd, capture_output=True, text=True)
         
-        install_cmd = ["npm", "install", "@playwright/test"]
-        result = subprocess.run(install_cmd, cwd=test_dir, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            test_case.test_execution_log.append(f"⚠️ npm install warning: {result.stderr}")
+        if result.returncode == 0:
+            test_case.test_execution_log.append("✅ Using pre-installed Playwright (fast startup)")
+            use_global_playwright = True
         else:
-            test_case.test_execution_log.append("✅ Playwright installed successfully")
-        
-        # Install Playwright browsers
-        test_case.test_execution_log.append("🌐 Installing Playwright browsers...")
-        
-        browsers_cmd = ["npx", "playwright", "install", "chromium"]
-        result = subprocess.run(browsers_cmd, cwd=test_dir, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            test_case.test_execution_log.append(f"⚠️ Browser install error: {result.stderr}")
-        else:
-            test_case.test_execution_log.append("✅ Chromium browser installed successfully")
+            # Fallback to local installation only if needed
+            test_case.test_execution_log.append("📦 Installing Playwright locally...")
+            
+            install_cmd = ["npm", "init", "-y"]
+            subprocess.run(install_cmd, cwd=test_dir, capture_output=True)
+            
+            install_cmd = ["npm", "install", "@playwright/test"]
+            result = subprocess.run(install_cmd, cwd=test_dir, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                test_case.test_execution_log.append(f"⚠️ npm install warning: {result.stderr}")
+            else:
+                test_case.test_execution_log.append("✅ Playwright installed successfully")
+            
+            use_global_playwright = False
         
         yield {
             execution_log_comp: gr.update(value="\n".join(test_case.test_execution_log))
@@ -1312,8 +1344,43 @@ async def _run_playwright_test(
         test_env = os.environ.copy()
         test_env['DISPLAY'] = ':99'
         
-        test_cmd = ["npx", "playwright", "test", "--config", "playwright.config.js"]
-        result = subprocess.run(test_cmd, cwd=test_dir, capture_output=True, text=True, env=test_env)
+        # Use global or local Playwright based on availability
+        if use_global_playwright:
+            # Try global playwright test command first
+            test_cmd = ["playwright", "test", "--config", "playwright.config.js"]
+            result = subprocess.run(test_cmd, cwd=test_dir, capture_output=True, text=True, env=test_env)
+            
+            # If global playwright test fails, fallback to npx with local installation
+            if result.returncode != 0 and "unknown command 'test'" in result.stderr:
+                test_case.test_execution_log.append("⚠️ Global Playwright doesn't include test runner, installing locally...")
+                
+                # Install @playwright/test locally
+                install_cmd = ["npm", "init", "-y"]
+                subprocess.run(install_cmd, cwd=test_dir, capture_output=True)
+                
+                install_cmd = ["npm", "install", "@playwright/test"]
+                install_result = subprocess.run(install_cmd, cwd=test_dir, capture_output=True, text=True)
+                
+                if install_result.returncode != 0:
+                    test_case.test_execution_log.append(f"❌ Failed to install @playwright/test: {install_result.stderr}")
+                else:
+                    test_case.test_execution_log.append("✅ @playwright/test installed locally")
+                    
+                    # Install browsers for the local installation
+                    test_case.test_execution_log.append("📥 Installing Playwright browsers...")
+                    browser_install_cmd = ["npx", "playwright", "install", "chromium"]
+                    browser_result = subprocess.run(browser_install_cmd, cwd=test_dir, capture_output=True, text=True)
+                    
+                    if browser_result.returncode != 0:
+                        test_case.test_execution_log.append(f"⚠️ Browser installation warning: {browser_result.stderr}")
+                    else:
+                        test_case.test_execution_log.append("✅ Chromium browser installed")
+                
+                test_cmd = ["npx", "playwright", "test", "--config", "playwright.config.js"]
+                result = subprocess.run(test_cmd, cwd=test_dir, capture_output=True, text=True, env=test_env)
+        else:
+            test_cmd = ["npx", "playwright", "test", "--config", "playwright.config.js"]
+            result = subprocess.run(test_cmd, cwd=test_dir, capture_output=True, text=True, env=test_env)
         
         test_case.test_execution_log.append(f"📊 Test execution completed with exit code: {result.returncode}")
         

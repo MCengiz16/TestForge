@@ -139,7 +139,20 @@ For ARM64 systems (e.g., Apple Silicon Macs), please run follow command:
 TARGETPLATFORM=linux/arm64 docker compose up --build
 ```
 
-#### Step 4: Enjoy the web-ui and vnc
+#### Step 4: Configure Settings
+1. **Access the WebUI:** Open your web browser and navigate to `http://127.0.0.1:7788`
+2. **Configure LLM Settings:** Go to the "🔧 Agent Settings" tab
+   - Set your LLM provider (OpenAI, Anthropic, etc.)
+   - Enter your API key
+   - Click "💾 Save Settings" to persist across restarts
+3. **Configure Test Settings (Optional):** Go to the "⚙️ Test Settings" tab
+   - Customize AI prompt templates
+   - Modify Playwright configuration
+   - Click "💾 Save to File" to persist
+
+📖 **For detailed settings configuration, see [SETTINGS.md](SETTINGS.md)**
+
+#### Step 5: Enjoy the web-ui and vnc
 - Web-UI: Open `http://localhost:7788` in your browser
 - VNC Viewer (for watching browser interactions): Open `http://localhost:6080/vnc.html`
   - Default VNC password: "youvncpassword"

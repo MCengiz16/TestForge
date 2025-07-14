@@ -118,14 +118,47 @@ def update_global_settings(ai_prompt, playwright_config):
     _current_playwright_config = playwright_config
 
 def create_test_settings_tab(webui_manager: WebuiManager):
-    """Create the test settings configuration tab"""
+    """Create the test settings configuration tab with persistence"""
+    
+    def save_test_settings_to_file(ai_prompt, playwright_config):
+        """Save test settings to file"""
+        settings = {
+            'ai_prompt': ai_prompt,
+            'playwright_config': playwright_config
+        }
+        try:
+            settings_file = os.path.join(os.path.expanduser('~'), '.webui_test_settings.json')
+            with open(settings_file, 'w') as f:
+                json.dump(settings, f, indent=2)
+            # Also update global variables for current session
+            update_global_settings(ai_prompt, playwright_config)
+            return "✅ Settings saved to file and applied to session!"
+        except Exception as e:
+            return f"❌ Error saving settings: {e}"
+    
+    def load_test_settings_from_file():
+        """Load test settings from file"""
+        try:
+            settings_file = os.path.join(os.path.expanduser('~'), '.webui_test_settings.json')
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r') as f:
+                    settings = json.load(f)
+                ai_prompt = settings.get('ai_prompt', DEFAULT_AI_PROMPT_TEMPLATE)
+                playwright_config = settings.get('playwright_config', DEFAULT_PLAYWRIGHT_CONFIG)
+                # Update global variables
+                update_global_settings(ai_prompt, playwright_config)
+                return ai_prompt, playwright_config, "✅ Settings loaded from file!"
+            else:
+                return DEFAULT_AI_PROMPT_TEMPLATE, DEFAULT_PLAYWRIGHT_CONFIG, "ℹ️ No saved settings found, using defaults"
+        except Exception as e:
+            return DEFAULT_AI_PROMPT_TEMPLATE, DEFAULT_PLAYWRIGHT_CONFIG, f"❌ Error loading settings: {e}"
     
     def load_settings():
-        """Load default settings (session-only, no file persistence)"""
+        """Load default settings (backwards compatibility)"""
         return DEFAULT_AI_PROMPT_TEMPLATE, DEFAULT_PLAYWRIGHT_CONFIG
     
     def save_settings(ai_prompt, playwright_config):
-        """Update session settings (no permanent file saving)"""
+        """Update session settings (backwards compatibility)"""
         try:
             # Update global variables for current session only
             update_global_settings(ai_prompt, playwright_config)
@@ -157,8 +190,8 @@ def create_test_settings_tab(webui_manager: WebuiManager):
         except Exception as e:
             return f"❌ Validation error: {e}"
     
-    # Load initial settings
-    initial_prompt, initial_config = load_settings()
+    # Load initial settings from file if available
+    initial_prompt, initial_config, load_msg = load_test_settings_from_file()
     
     with gr.Column():
         gr.Markdown("## ⚙️ Test Generation Settings")
@@ -217,16 +250,18 @@ def create_test_settings_tab(webui_manager: WebuiManager):
         # Save Settings Section
         with gr.Row():
             with gr.Column():
-                gr.Markdown("### 🔄 Session Settings")
-                gr.Markdown("*Settings are applied for the current session only and reset when you restart the application.*")
+                gr.Markdown("### 💾 Settings Persistence")
+                gr.Markdown("*Save settings to file for persistence across app restarts.*")
                 
                 with gr.Row():
-                    save_btn = gr.Button("🔄 Apply Settings for Session", variant="primary", size="lg")
+                    save_file_btn = gr.Button("💾 Save to File", variant="primary", size="lg")
+                    load_file_btn = gr.Button("📂 Load from File", variant="secondary", size="lg")
+                    save_session_btn = gr.Button("🔄 Apply to Session", variant="primary", size="sm")
                     reset_all_btn = gr.Button("↩️ Reset to Defaults", size="lg")
                 
                 save_status = gr.Textbox(
-                    label="Session Status",
-                    value="Ready to apply changes",
+                    label="Settings Status",
+                    value=load_msg,
                     interactive=False,
                     lines=1
                 )
@@ -266,7 +301,9 @@ def create_test_settings_tab(webui_manager: WebuiManager):
         "prompt_status": prompt_status,
         "config_status": config_status,
         "save_status": save_status,
-        "save_btn": save_btn,
+        "save_file_btn": save_file_btn,
+        "load_file_btn": load_file_btn,
+        "save_session_btn": save_session_btn,
         "reset_all_btn": reset_all_btn,
         "validate_prompt_btn": validate_prompt_btn,
         "validate_config_btn": validate_config_btn,
@@ -310,7 +347,18 @@ def create_test_settings_tab(webui_manager: WebuiManager):
         return config_text
     
     # Connect events
-    save_btn.click(
+    save_file_btn.click(
+        fn=save_test_settings_to_file,
+        inputs=[ai_prompt, playwright_config],
+        outputs=[save_status]
+    )
+    
+    load_file_btn.click(
+        fn=load_test_settings_from_file,
+        outputs=[ai_prompt, playwright_config, save_status]
+    )
+    
+    save_session_btn.click(
         fn=save_settings,
         inputs=[ai_prompt, playwright_config],
         outputs=[save_status]
