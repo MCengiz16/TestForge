@@ -23,10 +23,10 @@ docker-compose up --build
 1. **Access WebUI**: http://localhost:7788
 2. **Go to "🔧 Agent Settings" tab**
 3. **Configure your LLM**:
-   - Provider: `openai`
-   - Model: `gpt-4o-mini`
-   - API Key: Your OpenAI API key
-   - Base URL: `https://api.openai.com/v1`
+   - **Provider**: Choose from OpenAI, Anthropic, Google, Azure, Ollama, DeepSeek, Mistral, and more
+   - **Model**: Select your preferred model (e.g., `gpt-4o-mini`, `claude-3-5-sonnet`, `gemini-pro`)
+   - **API Key**: Your provider's API key
+   - **Base URL**: Provider's API endpoint (auto-filled for most providers)
 4. **Click "💾 Save Settings"**
 
 ### 3. Create Your First Test
@@ -95,7 +95,7 @@ test.describe('User Login Flow', () => {
 ## 🔧 Requirements
 
 - Docker & Docker Compose
-- OpenAI API key (or other supported LLM provider)
+- API key from any supported LLM provider (OpenAI, Anthropic, Google, Azure, DeepSeek, Mistral, etc.)
 
 ### Platform Support
 - ✅ **Linux**: Full support with native X11
@@ -107,6 +107,10 @@ test.describe('User Login Flow', () => {
 ## 💾 Settings
 
 Settings are stored locally in a `settings/` directory and persist across restarts. Your API keys and configuration are never committed to git.
+
+## 🙏 Acknowledgments
+
+This project is based on [browser-use/web-ui](https://github.com/browser-use/web-ui) and has been specialized for intelligent test automation. We thank the browser-use team for their excellent foundation.
 
 ## 🤝 Contributing
 

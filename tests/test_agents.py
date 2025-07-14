@@ -326,75 +326,8 @@ async def test_browser_use_parallel():
             await controller.close_mcp_client()
 
 
-async def test_deep_research_agent():
-    from src.agent.deep_research.deep_research_agent import DeepResearchAgent, PLAN_FILENAME, REPORT_FILENAME
-    from src.utils import llm_provider
-
-    llm = llm_provider.get_llm_model(
-        provider="openai",
-        model_name="gpt-4o",
-        temperature=0.5
-    )
-
-    # llm = llm_provider.get_llm_model(
-    #     provider="bedrock",
-    # )
-
-    mcp_server_config = {
-        "mcpServers": {
-            "desktop-commander": {
-                "command": "npx",
-                "args": [
-                    "-y",
-                    "@wonderwhy-er/desktop-commander"
-                ]
-            },
-        }
-    }
-
-    browser_config = {"headless": False, "window_width": 1280, "window_height": 1100, "use_own_browser": False}
-    agent = DeepResearchAgent(llm=llm, browser_config=browser_config, mcp_server_config=mcp_server_config)
-    research_topic = "Give me investment advices of nvidia and tesla."
-    task_id_to_resume = ""  # Set this to resume a previous task ID
-
-    print(f"Starting research on: {research_topic}")
-
-    try:
-        # Call run and wait for the final result dictionary
-        result = await agent.run(research_topic,
-                                 task_id=task_id_to_resume,
-                                 save_dir="./tmp/deep_research",
-                                 max_parallel_browsers=1,
-                                 )
-
-        print("\n--- Research Process Ended ---")
-        print(f"Status: {result.get('status')}")
-        print(f"Message: {result.get('message')}")
-        print(f"Task ID: {result.get('task_id')}")
-
-        # Check the final state for the report
-        final_state = result.get('final_state', {})
-        if final_state:
-            print("\n--- Final State Summary ---")
-            print(
-                f"  Plan Steps Completed: {sum(1 for item in final_state.get('research_plan', []) if item.get('status') == 'completed')}")
-            print(f"  Total Search Results Logged: {len(final_state.get('search_results', []))}")
-            if final_state.get("final_report"):
-                print("  Final Report: Generated (content omitted). You can find it in the output directory.")
-                # print("\n--- Final Report ---") # Optionally print report
-                # print(final_state["final_report"])
-            else:
-                print("  Final Report: Not generated.")
-        else:
-            print("Final state information not available.")
-
-
-    except Exception as e:
-        print(f"\n--- An unhandled error occurred outside the agent run ---")
-        print(e)
 
 
 if __name__ == "__main__":
     asyncio.run(test_browser_use_agent())
     # asyncio.run(test_browser_use_parallel())
-    # asyncio.run(test_deep_research_agent())
