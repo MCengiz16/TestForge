@@ -7,10 +7,10 @@ from src.webui.webui_manager import WebuiManager
 _current_ai_prompt = None
 _current_playwright_config = None
 
-# Default AI prompt template for test script generation
-DEFAULT_AI_PROMPT_TEMPLATE = """You are an expert Playwright test automation engineer. 
+# Enhanced AI prompt template for test script generation
+DEFAULT_AI_PROMPT_TEMPLATE = """You are an expert Playwright test automation engineer specializing in creating robust, maintainable test scripts.
 
-Please analyze this test case and generate a complete, professional Playwright test script.
+Generate a professional Playwright test script with semantic step names and business context.
 
 TEST CASE:
 Name: {test_case_name}
@@ -20,18 +20,67 @@ Steps:
 
 {discovered_elements}
 
-REQUIREMENTS:
-1. Generate a complete Playwright test script in JavaScript
-2. Use proper selectors (IDs, CSS selectors, or text-based locators)
-3. Include proper error handling and waits (timeouts are configured globally)
-4. Use expect() assertions for validations
-5. No screenshots needed (videos and traces are captured automatically)
-6. Make the script robust and maintainable
-7. Use standard Playwright methods: waitForSelector, click, fill, etc. (timeouts handled by config)
+CRITICAL REQUIREMENTS:
 
-Generate ONLY the JavaScript code, no explanations:"""
+1. **Test Structure & Organization:**
+   - Use test.describe() for test grouping
+   - Use test.step() for each logical business operation
+   - Name steps semantically (e.g., "Enter user credentials" not "Fill input fields")
+   - Organize into phases: Setup → Action → Verification → Cleanup
 
-# Default Playwright configuration template
+2. **Robust Selector Strategy:**
+   - Priority: data-testid > id > aria-label > role > text > css
+   - ALWAYS include fallback selectors: primary || fallback || 'generic'
+   - Use element.locator() with multiple strategies
+   - Avoid brittle text-based selectors when possible
+
+3. **Step Comments & Context:**
+   - Add business context comments explaining WHY each step matters
+   - Connect steps to user stories and acceptance criteria
+   - Include debugging hints for common failure points
+   - Use semantic variable names that reflect business operations
+
+4. **Error Handling & Robustness:**
+   - Use proper waits: waitForLoadState, waitForSelector
+   - Add retry mechanisms for flaky operations
+   - Include meaningful error messages
+   - Handle dynamic content and async operations
+
+5. **Code Quality:**
+   - Separate test data from test logic using variables
+   - Use descriptive test and step names
+   - Include proper assertions with meaningful messages
+   - Follow Playwright best practices
+
+EXAMPLE STRUCTURE:
+```javascript
+test.describe('User Authentication Journey', () => {{
+  test('should authenticate valid user and access dashboard', async ({{ page }}) => {{
+    
+    await test.step('Navigate to application login portal', async () => {{
+      // Business context: Start user authentication flow
+      await page.goto(testUrl);
+      await page.waitForLoadState('networkidle');
+    }});
+    
+    await test.step('Enter user credentials for authentication', async () => {{
+      // Business context: Provide valid credentials for access
+      const usernameField = page.locator('[data-testid="username"]').or(page.locator('#username')).or(page.locator('input[name="username"]'));
+      await usernameField.waitFor({{ state: 'visible' }});
+      await usernameField.fill(testData.username);
+    }});
+    
+    await test.step('Verify successful authentication and dashboard access', async () => {{
+      // Business context: Confirm user can access protected area
+      await expect(page.locator('[data-testid="welcome-message"]').or(page.locator('.welcome'))).toBeVisible();
+    }});
+  }});
+}});
+```
+
+Generate ONLY the JavaScript code with this enhanced structure, no explanations:"""
+
+# Simplified Playwright configuration template
 DEFAULT_PLAYWRIGHT_CONFIG = """module.exports = {
     testDir: '.',
     timeout: 120000,
@@ -40,58 +89,18 @@ DEFAULT_PLAYWRIGHT_CONFIG = """module.exports = {
     },
     use: {
         headless: false,
-        viewport: null,
+        viewport: { width: 1920, height: 1080 },
         actionTimeout: 30000,
         navigationTimeout: 30000,
-        waitForSelectorTimeout: 30000,
-        waitForTimeout: 30000,
-        launchOptions: {
-            args: [
-                '--start-fullscreen',
-                '--kiosk',
-                '--window-size=1920,1080',
-                '--window-position=0,0',
-                '--no-sandbox',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor'
-            ]
-        },
         screenshot: 'off',
         video: 'on',
-        trace: 'on',
+        trace: 'on'
     },
     reporter: [
         ['html', { outputFolder: 'playwright-report', open: 'never' }],
-        ['json', { outputFile: 'test-results.json' }],
-        ['junit', { outputFile: 'junit-results.xml' }]
+        ['json', { outputFile: 'test-results.json' }]
     ],
-    outputDir: 'test-results',
-    projects: [
-        {
-            name: 'chromium',
-            use: {
-                viewport: null,
-                actionTimeout: 30000,
-                navigationTimeout: 30000,
-                waitForSelectorTimeout: 30000,
-                waitForTimeout: 30000,
-                launchOptions: {
-                    args: [
-                        '--start-fullscreen',
-                        '--kiosk',
-                        '--window-size=1920,1080',
-                        '--window-position=0,0',
-                        '--no-sandbox',
-                        '--disable-web-security',
-                        '--disable-features=VizDisplayCompositor'
-                    ]
-                },
-                screenshot: 'off',
-                video: 'on',
-                trace: 'on',
-            },
-        },
-    ],
+    outputDir: 'test-results'
 };"""
 
 def get_current_ai_prompt():
@@ -111,41 +120,18 @@ def update_global_settings(ai_prompt, playwright_config):
 def create_test_settings_tab(webui_manager: WebuiManager):
     """Create the test settings configuration tab"""
     
-    # Load saved settings or use defaults
-    settings_file = "./tmp/test_settings.json"
-    
     def load_settings():
-        """Load settings from file or return defaults"""
-        try:
-            if os.path.exists(settings_file):
-                with open(settings_file, 'r') as f:
-                    settings = json.load(f)
-                    return (
-                        settings.get('ai_prompt', DEFAULT_AI_PROMPT_TEMPLATE),
-                        settings.get('playwright_config', DEFAULT_PLAYWRIGHT_CONFIG)
-                    )
-        except Exception as e:
-            print(f"Error loading settings: {e}")
-        
+        """Load default settings (session-only, no file persistence)"""
         return DEFAULT_AI_PROMPT_TEMPLATE, DEFAULT_PLAYWRIGHT_CONFIG
     
     def save_settings(ai_prompt, playwright_config):
-        """Save settings to file and update global variables"""
+        """Update session settings (no permanent file saving)"""
         try:
-            # Update global variables first
+            # Update global variables for current session only
             update_global_settings(ai_prompt, playwright_config)
-            
-            # Save to file
-            os.makedirs("./tmp", exist_ok=True)
-            settings = {
-                'ai_prompt': ai_prompt,
-                'playwright_config': playwright_config
-            }
-            with open(settings_file, 'w') as f:
-                json.dump(settings, f, indent=2)
-            return "✅ Settings saved successfully!"
+            return "✅ Settings updated for current session!"
         except Exception as e:
-            return f"❌ Error saving settings: {e}"
+            return f"❌ Error updating settings: {e}"
     
     def reset_to_defaults():
         """Reset settings to defaults"""
@@ -231,15 +217,16 @@ def create_test_settings_tab(webui_manager: WebuiManager):
         # Save Settings Section
         with gr.Row():
             with gr.Column():
-                gr.Markdown("### 💾 Save Settings")
+                gr.Markdown("### 🔄 Session Settings")
+                gr.Markdown("*Settings are applied for the current session only and reset when you restart the application.*")
                 
                 with gr.Row():
-                    save_btn = gr.Button("💾 Save All Settings", variant="primary", size="lg")
-                    reset_all_btn = gr.Button("🔄 Reset All to Defaults", size="lg")
+                    save_btn = gr.Button("🔄 Apply Settings for Session", variant="primary", size="lg")
+                    reset_all_btn = gr.Button("↩️ Reset to Defaults", size="lg")
                 
                 save_status = gr.Textbox(
-                    label="Save Status",
-                    value="Ready to save",
+                    label="Session Status",
+                    value="Ready to apply changes",
                     interactive=False,
                     lines=1
                 )
@@ -257,16 +244,19 @@ def create_test_settings_tab(webui_manager: WebuiManager):
                 - `{discovered_elements}` - Real selectors discovered by the agent
                 
                 **Playwright Configuration:**
-                - Modify timeouts, browser settings, reporting options
-                - All timeouts are in milliseconds (30000 = 30 seconds)
-                - Browser args control how Chrome/Chromium launches
-                - Reporters determine output format (HTML, JSON, JUnit)
+                - timeout: Global test timeout in milliseconds (120000 = 2 minutes)
+                - actionTimeout: How long to wait for actions (30000 = 30 seconds)
+                - navigationTimeout: How long to wait for page loads (30000 = 30 seconds)
+                - headless: true/false - whether to show browser during tests
+                - viewport: Browser window size
+                - screenshot/video/trace: Enable/disable recording features
                 
                 **Tips:**
                 - Keep the AI prompt focused and specific
                 - Test your changes with simple test cases first
-                - Save settings before running tests
+                - Apply settings before running tests
                 - Use the validate buttons to check syntax
+                - Settings are session-only and reset on app restart
                 """)
     
     # Store components for webui_manager
@@ -329,7 +319,7 @@ def create_test_settings_tab(webui_manager: WebuiManager):
     def reset_to_defaults_with_update():
         """Reset settings to defaults and update global variables"""
         update_global_settings(DEFAULT_AI_PROMPT_TEMPLATE, DEFAULT_PLAYWRIGHT_CONFIG)
-        return DEFAULT_AI_PROMPT_TEMPLATE, DEFAULT_PLAYWRIGHT_CONFIG, "🔄 Settings reset to defaults"
+        return DEFAULT_AI_PROMPT_TEMPLATE, DEFAULT_PLAYWRIGHT_CONFIG, "🔄 Settings reset to defaults for session"
     
     reset_all_btn.click(
         fn=reset_to_defaults_with_update,
