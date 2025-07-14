@@ -401,10 +401,6 @@ async def _execute_test_case(
             comp = webui_manager.id_to_component.get(f"agent_settings.{key}")
             return components.get(comp, default) if comp else default
 
-        def get_browser_setting(key, default=None):
-            comp = webui_manager.id_to_component.get(f"browser_settings.{key}")
-            return components.get(comp, default) if comp else default
-
         # LLM settings
         llm_provider_name = get_setting("llm_provider", None)
         llm_model_name = get_setting("llm_model_name", None)
@@ -413,10 +409,10 @@ async def _execute_test_case(
         llm_api_key = get_setting("llm_api_key") or None
         ollama_num_ctx = get_setting("ollama_num_ctx", 16000)
         
-        # Browser settings
-        headless = get_browser_setting("headless", True)  # Force headless for testing
-        window_w = int(get_browser_setting("window_w", 1280))
-        window_h = int(get_browser_setting("window_h", 1100))
+        # Browser settings (using default values)
+        headless = True  # Force headless for testing
+        window_w = 1280
+        window_h = 1100
         
         # Initialize LLM
         main_llm = await _initialize_llm_for_test(

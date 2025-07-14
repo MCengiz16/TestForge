@@ -82,7 +82,7 @@ def _get_config_value(
         return comp_dict.get(comp, default)
     except KeyError:
         # Try accessing settings tabs as well
-        for prefix in ["agent_settings", "browser_settings"]:
+        for prefix in ["agent_settings"]:
             try:
                 comp_id = f"{prefix}.{comp_id_suffix}"
                 comp = webui_manager.get_component_by_id(comp_id)
@@ -375,29 +375,21 @@ async def run_agent_task(
             planner_ollama_num_ctx if planner_llm_provider_name == "ollama" else None,
         )
 
-    # --- Browser Settings ---
-    def get_browser_setting(key, default=None):
-        comp = webui_manager.id_to_component.get(f"browser_settings.{key}")
-        return components.get(comp, default) if comp else default
-
-    browser_binary_path = get_browser_setting("browser_binary_path") or None
-    browser_user_data_dir = get_browser_setting("browser_user_data_dir") or None
-    use_own_browser = get_browser_setting(
-        "use_own_browser", False
-    )  # Logic handled by CDP/WSS presence
-    keep_browser_open = get_browser_setting("keep_browser_open", False)
-    headless = get_browser_setting("headless", False)
-    disable_security = get_browser_setting("disable_security", False)
-    window_w = int(get_browser_setting("window_w", 1280))
-    window_h = int(get_browser_setting("window_h", 1100))
-    cdp_url = get_browser_setting("cdp_url") or None
-    wss_url = get_browser_setting("wss_url") or None
-    save_recording_path = get_browser_setting("save_recording_path") or None
-    save_trace_path = get_browser_setting("save_trace_path") or None
-    save_agent_history_path = get_browser_setting(
-        "save_agent_history_path", "./tmp/agent_history"
-    )
-    save_download_path = get_browser_setting("save_download_path", "./tmp/downloads")
+    # --- Browser Settings (using default values) ---
+    browser_binary_path = None
+    browser_user_data_dir = None
+    use_own_browser = False
+    keep_browser_open = False
+    headless = False
+    disable_security = False
+    window_w = 1280
+    window_h = 1100
+    cdp_url = None
+    wss_url = None
+    save_recording_path = None
+    save_trace_path = None
+    save_agent_history_path = "./tmp/agent_history"
+    save_download_path = "./tmp/downloads"
 
     stream_vw = 70
     stream_vh = int(70 * window_h // window_w)

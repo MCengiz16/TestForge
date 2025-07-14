@@ -134,15 +134,15 @@ async def run_deep_research(webui_manager: WebuiManager, components: Dict[Compon
         if not llm:
             raise ValueError("LLM Initialization failed. Please check Agent Settings.")
 
-        # Browser Config (from browser_settings tab)
+        # Browser Config (using default values)
         # Note: DeepResearchAgent constructor takes a dict, not full Browser/Context objects
         browser_config_dict = {
-            "headless": get_setting("browser_settings", "headless", False),
-            "disable_security": get_setting("browser_settings", "disable_security", False),
-            "browser_binary_path": get_setting("browser_settings", "browser_binary_path"),
-            "user_data_dir": get_setting("browser_settings", "browser_user_data_dir"),
-            "window_width": int(get_setting("browser_settings", "window_w", 1280)),
-            "window_height": int(get_setting("browser_settings", "window_h", 1100)),
+            "headless": False,
+            "disable_security": False,
+            "browser_binary_path": None,
+            "user_data_dir": None,
+            "window_width": 1280,
+            "window_height": 1100,
             # Add other relevant fields if DeepResearchAgent accepts them
         }
 

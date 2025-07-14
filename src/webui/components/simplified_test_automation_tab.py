@@ -233,10 +233,7 @@ async def _execute_test_case(
         if not llm:
             raise Exception("Failed to initialize LLM")
         
-        # Get browser settings
-        def get_browser_setting(key, default=None):
-            comp = webui_manager.id_to_component.get(f"browser_settings.{key}")
-            return components.get(comp, default) if comp else default
+        # Browser settings (using default values for testing)
 
         # Create test environment
         test_dir = os.path.join("./tmp/test_results", test_case.id)

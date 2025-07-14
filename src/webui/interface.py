@@ -2,7 +2,6 @@ import gradio as gr
 
 from src.webui.webui_manager import WebuiManager
 from src.webui.components.agent_settings_tab import create_agent_settings_tab
-from src.webui.components.browser_settings_tab import create_browser_settings_tab
 from src.webui.components.intelligent_test_automation_tab import create_test_automation_tab
 
 theme_map = {
@@ -73,6 +72,5 @@ def create_ui(theme_name="Ocean"):
 
             with gr.TabItem("🔧 Agent Settings"):
                 create_agent_settings_tab(ui_manager)
-                create_browser_settings_tab(ui_manager)
 
     return demo
