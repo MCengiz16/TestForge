@@ -21,9 +21,112 @@ from src.browser.custom_browser import CustomBrowser
 from src.controller.custom_controller import CustomController
 from src.utils import llm_provider
 from src.webui.webui_manager import WebuiManager
-from src.webui.components.test_settings_tab import get_current_ai_prompt, get_current_playwright_config
 
 logger = logging.getLogger(__name__)
+
+# Default AI prompt template
+DEFAULT_AI_PROMPT_TEMPLATE = """You are an expert Playwright test automation engineer specializing in creating robust, maintainable test scripts.
+
+Generate a professional Playwright test script with semantic step names and business context.
+
+TEST CASE:
+Name: {test_case_name}
+URL: {test_case_url}
+Steps:
+{test_case_steps}
+
+{discovered_elements}
+
+CRITICAL REQUIREMENTS:
+
+1. **Test Structure & Organization:**
+   - Use test.describe() for test grouping
+   - Use test.step() for each logical business operation
+   - Name steps semantically (e.g., "Enter user credentials" not "Fill input fields")
+   - Organize into phases: Setup → Action → Verification → Cleanup
+
+2. **Robust Selector Strategy:**
+   - Priority: data-testid > id > aria-label > role > text > css
+   - ALWAYS include fallback selectors: primary || fallback || 'generic'
+   - Use element.locator() with multiple strategies
+   - Avoid brittle text-based selectors when possible
+
+3. **Step Comments & Context:**
+   - Add business context comments explaining WHY each step matters
+   - Connect steps to user stories and acceptance criteria
+   - Include debugging hints for common failure points
+   - Use semantic variable names that reflect business operations
+
+4. **Error Handling & Robustness:**
+   - Use proper waits: waitForLoadState, waitForSelector
+   - Add retry mechanisms for flaky operations
+   - Include meaningful error messages
+   - Handle dynamic content and async operations
+
+5. **Code Quality:**
+   - Separate test data from test logic using variables
+   - Use descriptive test and step names
+   - Include proper assertions with meaningful messages
+   - Follow Playwright best practices
+
+EXAMPLE STRUCTURE:
+```javascript
+test.describe('User Authentication Journey', () => {{
+  test('should authenticate valid user and access dashboard', async ({{ page }}) => {{
+    
+    await test.step('Navigate to application login portal', async () => {{
+      // Business context: Start user authentication flow
+      await page.goto(testUrl);
+      await page.waitForLoadState('networkidle');
+    }});
+    
+    await test.step('Enter user credentials for authentication', async () => {{
+      // Business context: Provide valid credentials for access
+      const usernameField = page.locator('[data-testid="username"]').or(page.locator('#username')).or(page.locator('input[name="username"]'));
+      await usernameField.waitFor({{ state: 'visible' }});
+      await usernameField.fill(testData.username);
+    }});
+    
+    await test.step('Verify successful authentication and dashboard access', async () => {{
+      // Business context: Confirm user can access protected area
+      await expect(page.locator('[data-testid="welcome-message"]').or(page.locator('.welcome'))).toBeVisible();
+    }});
+  }});
+}});
+```
+
+Generate ONLY the JavaScript code with this enhanced structure, no explanations:"""
+
+# Default Playwright configuration
+DEFAULT_PLAYWRIGHT_CONFIG = """module.exports = {
+    testDir: '.',
+    timeout: 120000,
+    expect: {
+        timeout: 30000
+    },
+    use: {
+        headless: false,
+        viewport: { width: 1920, height: 1080 },
+        actionTimeout: 30000,
+        navigationTimeout: 30000,
+        screenshot: 'off',
+        video: 'on',
+        trace: 'on'
+    },
+    reporter: [
+        ['html', { outputFolder: 'playwright-report', open: 'never' }],
+        ['json', { outputFile: 'test-results.json' }]
+    ],
+    outputDir: 'test-results'
+};"""
+
+def get_current_ai_prompt():
+    """Get the current AI prompt template"""
+    return DEFAULT_AI_PROMPT_TEMPLATE
+
+def get_current_playwright_config():
+    """Get the current Playwright config"""
+    return DEFAULT_PLAYWRIGHT_CONFIG
 
 
 class TestCase:
